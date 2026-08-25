@@ -1,0 +1,20 @@
+plugins {
+    id "base"
+}
+
+// 调用 pnpm 构建 UI，产物输出到 ui/build/dist
+tasks.register('pnpmBuild', Exec) {
+    group = 'build'
+    workingDir projectDir
+    // Windows 下 Java ProcessBuilder 无法直接启动无扩展名的 pnpm shim，
+    // 需要通过 cmd /c 解析 pnpm.cmd
+    if (System.getProperty('os.name').toLowerCase().contains('windows')) {
+        commandLine 'cmd', '/c', 'pnpm', 'build'
+    } else {
+        commandLine 'pnpm', 'build'
+    }
+}
+
+tasks.named('assemble') {
+    dependsOn 'pnpmBuild'
+}

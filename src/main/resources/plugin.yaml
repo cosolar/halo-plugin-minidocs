@@ -1,0 +1,21 @@
+apiVersion: plugin.halo.run/v1alpha1
+kind: Plugin
+metadata:
+  name: halo-plugin-minidocs
+spec:
+  enabled: true
+  requires: ">=2.26.0"
+  version: 1.0.0
+  author:
+    name: Cosolar
+    website: https://note.minims.cn
+  logo: logo.svg
+  displayName: "知识库"
+  description: "在 Halo 平台上搭建个人或团队知识库：多知识库管理、文档树、Markdown 编辑、分类标签与权限控制"
+  homepage: https://github.com/cosolar/halo-plugin-minidocs
+  repo: https://github.com/cosolar/halo-plugin-minidocs
+  license:
+    - name: "GPL-3.0"
+      url: "https://github.com/cosolar/halo-plugin-minidocs/blob/main/LICENSE"
+  settingName: halo-plugin-minidocs-settings
+  configMapName: halo-plugin-minidocs-configmap

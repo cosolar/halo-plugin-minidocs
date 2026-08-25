@@ -1,0 +1,3 @@
+# pnpm 11 允许 esbuild 运行构建脚本（否则 install 以退出码 1 失败）
+allowBuilds:
+  esbuild: true

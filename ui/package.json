@@ -1,0 +1,43 @@
+{
+  "name": "halo-plugin-minidocs-ui",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite dev",
+    "type-check": "vue-tsc --noEmit"
+  },
+  "dependencies": {
+    "@bytemd/plugin-gfm": "^1.22.0",
+    "@bytemd/plugin-highlight": "^1.22.0",
+    "@bytemd/plugin-math": "^1.22.0",
+    "@bytemd/plugin-mermaid": "^1.22.0",
+    "@bytemd/vue-next": "^1.22.0",
+    "@halo-dev/api-client": "^2.26.0",
+    "@halo-dev/components": "^2.26.0",
+    "@halo-dev/ui-shared": "^2.26.0",
+    "axios": "^1.7.0",
+    "bytemd": "^1.22.0",
+    "highlight.js": "^11.12.0",
+    "katex": "^0.18.4",
+    "marked": "^18.0.10",
+    "marked-highlight": "^2.2.4",
+    "mermaid": "^11.17.0",
+    "turndown": "^7.2.4",
+    "vue": "^3.5.0",
+    "vue-router": "^4.4.0"
+  },
+  "devDependencies": {
+    "@halo-dev/ui-plugin-bundler-kit": "^2.26.0",
+    "@types/katex": "^0.16.8",
+    "@types/turndown": "^5.0.6",
+    "@unocss/webpack": "^66.8.1",
+    "@vitejs/plugin-vue": "^6.0.0",
+    "typescript": "^5.6.0",
+    "unocss": "^66.8.1",
+    "vite": "^7.0.0",
+    "vue-tsc": "^2.1.0"
+  },
+  "packageManager": "pnpm@11.23.0+sha512.f00082e5b283a199b74e079da28d155c008fe232f44c8a06ea7ddfa014ecf719fc362f790ecc67b28106ddac2afb24c49a9a079159da560b2ce7d1e98efd11af"
+}

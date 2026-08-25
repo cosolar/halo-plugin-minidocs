@@ -1,0 +1,4 @@
+/* 主题主色覆盖 */
+:root {
+  --colors-primary: 24 24 27 !important;
+}

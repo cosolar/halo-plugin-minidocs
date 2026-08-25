@@ -1,0 +1,78 @@
+package run.halo.plugin.minidocs.extension;
+
+import io.swagger.v3.oas.annotations.media.Schema;
+import java.time.Instant;
+import java.util.List;
+import lombok.Data;
+import lombok.EqualsAndHashCode;
+import run.halo.app.extension.AbstractExtension;
+import run.halo.app.extension.GVK;
+
+/**
+ * 知识库扩展（数据模型）。
+ *
+ * <p>对应 REST 路径：/apis/minidocs.halo.run/v1alpha1/knowledgebases
+ *
+ * @author Cosolar
+ */
+@Data
+@EqualsAndHashCode(callSuper = true)
+@GVK(
+    group = "minidocs.halo.run",
+    version = "v1alpha1",
+    kind = "KnowledgeBase",
+    plural = "knowledgebases",
+    singular = "knowledgebase"
+)
+public class KnowledgeBase extends AbstractExtension {
+
+    @Schema(requiredMode = Schema.RequiredMode.REQUIRED)
+    private Spec spec;
+
+    @Schema(description = "状态信息（由 Reconciler/服务维护）")
+    private Status status;
+
+    @Data
+    @Schema(name = "KnowledgeBaseSpec")
+    public static class Spec {
+
+        @Schema(description = "知识库名称", requiredMode = Schema.RequiredMode.REQUIRED,
+            maxLength = 100)
+        private String displayName;
+
+        @Schema(description = "知识库描述")
+        private String description;
+
+        @Schema(description = "知识库图标")
+        private String logo;
+
+        @Schema(description = "是否公开可见", defaultValue = "false")
+        private Boolean publicVisible = false;
+
+        @Schema(description = "成员用户名列表（私有知识库可访问者）")
+        private List<String> members;
+
+        @Schema(description = "知识库标签")
+        private List<String> tags;
+
+        @Schema(description = "排序权重，越小越靠前")
+        private Integer priority;
+    }
+
+    @Data
+    @Schema(name = "KnowledgeBaseStatus")
+    public static class Status {
+
+        @Schema(description = "文档总数")
+        private Integer docCount;
+
+        @Schema(description = "最近发布时间")
+        private Instant lastPublishTime;
+
+        @Schema(description = "较上月新增知识库数")
+        private Integer kbGrowth;
+
+        @Schema(description = "较上月新增文档数")
+        private Integer docGrowth;
+    }
+}

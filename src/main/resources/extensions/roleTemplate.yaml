@@ -1,0 +1,59 @@
+apiVersion: v1alpha1
+kind: Role
+metadata:
+  name: role-template-minidocs-view
+  labels:
+    halo.run/role-template: "true"
+  annotations:
+    rbac.authorization.halo.run/module: "知识库"
+    rbac.authorization.halo.run/ui-permissions: '["plugin:halo-plugin-minidocs:knowledgebase:view"]'
+    rbac.authorization.halo.run/display-name: "知识库查看"
+rules:
+  - apiGroups: [ "minidocs.halo.run", "console.api.minidocs.halo.run" ]
+    resources:
+      - "knowledgebases"
+      - "knowledgebasedocs"
+      - "knowledgebases/tree"
+      - "knowledgebases/docs"
+      - "knowledgebases/docs/export"
+    verbs: [ "get", "list" ]
+---
+apiVersion: v1alpha1
+kind: Role
+metadata:
+  name: role-template-minidocs-manage
+  labels:
+    halo.run/role-template: "true"
+  annotations:
+    rbac.authorization.halo.run/dependencies: '["role-template-minidocs-view"]'
+    rbac.authorization.halo.run/ui-permissions: '["plugin:halo-plugin-minidocs:knowledgebase:manage"]'
+    rbac.authorization.halo.run/module: "知识库"
+    rbac.authorization.halo.run/display-name: "知识库管理"
+rules:
+  - apiGroups: [ "minidocs.halo.run", "console.api.minidocs.halo.run" ]
+    resources:
+      - "knowledgebases"
+      - "knowledgebasedocs"
+      - "knowledgebases/tree"
+      - "knowledgebases/docs"
+      - "knowledgebases/docs/publish"
+      - "knowledgebases/docs/move"
+      - "knowledgebases/docs/export"
+    verbs: [ "create", "patch", "update", "delete", "deletecollection" ]
+---
+apiVersion: v1alpha1
+kind: Role
+metadata:
+  name: role-template-minidocs-anonymous
+  labels:
+    halo.run/role-template: "true"
+    halo.run/hidden: "true"
+    rbac.authorization.halo.run/aggregate-to-anonymous: "true"
+rules:
+  - apiGroups: [ "api.minidocs.halo.run" ]
+    resources:
+      - "knowledgebases"
+      - "docs"
+      - "knowledgebases/tree"
+      - "knowledgebases/docs"
+    verbs: [ "get", "list" ]

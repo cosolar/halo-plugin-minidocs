@@ -1,0 +1,28 @@
+# Gradle
+build/
+.gradle/
+gradle-app.setting
+!gradle/wrapper/gradle-wrapper.jar
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+*.classpath
+*.project
+.settings/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Node / UI
+ui/node_modules/
+ui/build/
+ui/dist/
+node_modules/
+
+# Halo devtools 运行时产物
+workplace/
