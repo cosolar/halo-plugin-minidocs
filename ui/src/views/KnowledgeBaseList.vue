@@ -125,9 +125,9 @@ function getTheme(kb: KnowledgeBase) {
   return themePresets[hash % themePresets.length];
 }
 
-function formatTime(time?: string) {
+function formatTime(time?: string, fmt = "YYYY-MM-DD HH:mm") {
   if (!time) return "-";
-  return utils.date.format(time, "YYYY-MM-DD HH:mm");
+  return utils.date.format(time, fmt);
 }
 
 // 相对时间，超过 30 天显示具体日期
@@ -608,23 +608,29 @@ onMounted(() => {
               />
               <div class="kb-card-titles">
                 <h3 class="kb-card-title">{{ kb.spec.displayName }}</h3>
-                <p class="kb-card-desc">
-                  {{ kb.spec.description || '暂无描述' }}
-                </p>
+                <div v-if="kb.spec.tags?.length" class="kb-tag-list kb-tag-list-inline">
+                  <span
+                    v-for="tag in kb.spec.tags.slice(0, 4)"
+                    :key="tag"
+                    class="kb-tag-chip"
+                  >
+                    {{ tag }}
+                  </span>
+                </div>
               </div>
             </div>
             <VTag
               v-if="kb.spec.publicVisible"
               type="success"
               size="sm"
-              class="kb-status-tag"
+              class="kb-status-tag kb-status-public"
             >
               <template #leftIcon>
                 <IconEye class="h-3 w-3" />
               </template>
               公开
             </VTag>
-            <VTag v-else type="warning" size="sm" class="kb-status-tag">
+            <VTag v-else type="secondary" size="sm" class="kb-status-tag kb-status-private">
               <template #leftIcon>
                 <IconLockPasswordLine class="h-3 w-3" />
               </template>
@@ -634,16 +640,9 @@ onMounted(() => {
         </template>
 
         <div class="kb-card-body">
-          <div v-if="kb.spec.tags?.length" class="kb-tag-list">
-            <VTag
-              v-for="tag in kb.spec.tags.slice(0, 5)"
-              :key="tag"
-              type="secondary"
-              size="sm"
-            >
-              {{ tag }}
-            </VTag>
-          </div>
+          <p class="kb-card-desc">
+            {{ kb.spec.description || '暂无描述' }}
+          </p>
           <div class="kb-card-meta">
             <span class="kb-meta-item">
               <IconPages class="h-3.5 w-3.5" />
@@ -661,28 +660,35 @@ onMounted(() => {
 
         <template #footer>
           <div class="kb-card-footer">
-            <VButton size="sm" type="primary" @click="goDetail(kb.metadata.name)">
-              进入
+            <VButton
+              size="sm"
+              type="primary"
+              class="kb-enter-btn"
+              @click="goDetail(kb.metadata.name)"
+            >
               <template #icon>
                 <IconArrowRight class="h-3.5 w-3.5" />
               </template>
+              进入
             </VButton>
-            <VSpace class="kb-card-actions">
-              <span @click.stop>
-                <VButton size="sm" type="default" @click="openEdit(kb)">
-                  <template #icon>
-                    <IconRiPencilFill class="h-3.5 w-3.5" />
-                  </template>
-                  编辑
-                </VButton>
-              </span>
-              <VButton size="sm" type="danger" @click="remove(kb)">
-                <template #icon>
-                  <IconDeleteBin class="h-4 w-4" />
-                </template>
-                删除
-              </VButton>
-            </VSpace>
+            <div class="kb-card-actions">
+              <button
+                class="icon-btn icon-btn-edit"
+                title="编辑"
+                aria-label="编辑"
+                @click.stop="openEdit(kb)"
+              >
+                <IconRiPencilFill class="h-4 w-4" />
+              </button>
+              <button
+                class="icon-btn icon-btn-delete"
+                title="删除"
+                aria-label="删除"
+                @click.stop="remove(kb)"
+              >
+                <IconDeleteBin class="h-4 w-4" />
+              </button>
+            </div>
           </div>
         </template>
       </VCard>
@@ -739,28 +745,30 @@ onMounted(() => {
               </span>
               <span
                 class="kb-meta-item"
-                :title="kb.status?.lastPublishTime ? '更新于 ' + formatTime(kb.status.lastPublishTime) : '创建于 ' + formatTime(kb.metadata.creationTimestamp)"
+                :title="'创建于 ' + formatTime(kb.metadata.creationTimestamp)"
               >
-                更新于
-                {{ formatRelativeTime(kb.status?.lastPublishTime || kb.metadata.creationTimestamp) }}
+                创建于
+                {{ formatTime(kb.metadata.creationTimestamp, 'MM-dd HH:mm') }}
               </span>
             </div>
-            <VSpace class="kb-list-actions">
-              <span @click.stop>
-                <VButton size="sm" type="default" @click="openEdit(kb)">
-                  <template #icon>
-                    <IconRiPencilFill class="h-3.5 w-3.5" />
-                  </template>
-                  编辑
-                </VButton>
-              </span>
-              <VButton size="sm" type="danger" @click.stop="remove(kb)">
-                <template #icon>
-                  <IconDeleteBin class="h-4 w-4" />
-                </template>
-                删除
-              </VButton>
-            </VSpace>
+            <div class="kb-list-actions">
+              <button
+                class="icon-btn icon-btn-edit"
+                title="编辑"
+                aria-label="编辑"
+                @click.stop="openEdit(kb)"
+              >
+                <IconRiPencilFill class="h-4 w-4" />
+              </button>
+              <button
+                class="icon-btn icon-btn-delete"
+                title="删除"
+                aria-label="删除"
+                @click.stop="remove(kb)"
+              >
+                <IconDeleteBin class="h-4 w-4" />
+              </button>
+            </div>
           </div>
         </template>
       </VCard>
@@ -1262,7 +1270,7 @@ onMounted(() => {
   display: flex;
   align-items: flex-start;
   gap: 0.75rem;
-  padding: 1rem 1rem 0 1rem;
+  padding: 1rem 1rem 0.5rem;
 }
 
 .kb-card-info {
@@ -1303,26 +1311,47 @@ onMounted(() => {
 }
 
 .kb-card-desc {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   color: #6b7280;
-  line-height: 1.4;
-  margin-top: 0.125rem;
+  line-height: 1.5;
+  margin: 0;
+  word-break: break-word;
 }
 
 .kb-status-tag {
   flex-shrink: 0;
   margin-top: 0.125rem;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 9999px;
+}
+
+.kb-status-public {
+  background-color: rgba(220, 252, 231, 0.9);
+  color: #15803d;
+  border: 1px solid #bbf7d0;
+}
+
+.kb-status-private {
+  background-color: rgba(224, 231, 255, 0.9);
+  color: #4338ca;
+  border: 1px solid #c7d2fe;
 }
 
 .kb-card-body {
   flex: 1 1 auto;
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
-  padding: 0.75rem 1rem 1rem;
+  gap: 0.625rem;
+  padding: 0.5rem 1rem 1rem;
+}
+
+.kb-card-body .kb-card-desc {
+  margin: 0;
 }
 
 .kb-tag-list {
@@ -1355,7 +1384,7 @@ onMounted(() => {
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
-  padding: 0.875rem 1rem;
+  padding: 0.5rem 0.875rem;
   border-top: 1px solid #f3f4f6;
   background: #fafafa;
   border-radius: 0 0 12px 12px;
@@ -1364,6 +1393,93 @@ onMounted(() => {
 .kb-card-actions {
   display: flex;
   align-items: center;
+  gap: 0.5rem;
+}
+
+.kb-enter-btn {
+  height: 1.875rem;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+/* ========== 图标按钮（仅图标，无文字） ========== */
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.875rem;
+  height: 1.875rem;
+  border-radius: 9999px;
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  color: #4b5563;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.icon-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
+}
+
+.icon-btn:active {
+  transform: translateY(0);
+  box-shadow: none;
+}
+
+.icon-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25);
+}
+
+.icon-btn-edit {
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.icon-btn-edit:hover {
+  background: #dbeafe;
+  color: #1d4ed8;
+  border-color: #bfdbfe;
+}
+
+.icon-btn-delete {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.icon-btn-delete:hover {
+  background: #fee2e2;
+  color: #b91c1c;
+  border-color: #fecaca;
+}
+
+/* ========== 标签胶囊（卡片标题下） ========== */
+.kb-tag-list-inline {
+  margin-top: 0.375rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  min-height: 0;
+}
+
+.kb-tag-chip {
+  display: inline-flex;
+  align-items: center;
+  max-width: 8rem;
+  padding: 0.0625rem 0.5rem;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  line-height: 1.4;
+  color: #475569;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 9999px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* ========== 列表视图 ========== */
@@ -1420,7 +1536,9 @@ onMounted(() => {
 .kb-list-actions {
   display: flex;
   align-items: center;
+  gap: 0.5rem;
   flex-shrink: 0;
+  margin-left: auto;
 }
 
 @media (max-width: 1024px) {
@@ -1443,6 +1561,12 @@ onMounted(() => {
     justify-content: flex-end;
     margin-left: 2.5rem;
     margin-top: 0.5rem;
+  }
+}
+
+@media (min-width: 1025px) {
+  .kb-list-meta {
+    margin-left: auto;
   }
 }
 

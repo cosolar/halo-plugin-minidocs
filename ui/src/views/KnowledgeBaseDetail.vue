@@ -1565,7 +1565,7 @@ onMounted(async () => {
   flex-direction: column;
   min-height: 0;
   overflow: hidden;
-  padding: 1.25rem;
+  padding: 0;
 }
 
 .editor-container {
