@@ -26,7 +26,6 @@ import run.halo.app.extension.PageRequestImpl;
 import run.halo.app.extension.ReactiveExtensionClient;
 import run.halo.app.plugin.ReactiveSettingFetcher;
 import run.halo.plugin.minidocs.extension.KnowledgeBaseDoc;
-import run.halo.plugin.minidocs.infra.MarkdownRenderer;
 import run.halo.plugin.minidocs.setting.BasicSetting;
 
 import static org.springframework.data.domain.Sort.Order;
@@ -50,7 +49,6 @@ public class KnowledgeBaseDocService {
     private final ReactiveExtensionClient client;
     private final KnowledgeBaseService knowledgeBaseService;
     private final ReactiveSettingFetcher settingFetcher;
-    private final MarkdownRenderer markdownRenderer;
 
     /**
      * 分页查询知识库下的文档，支持 phase 与标题关键字过滤。
@@ -111,7 +109,6 @@ public class KnowledgeBaseDocService {
                 return uniqueSlug(kbName, spec.getSlug(), spec.getTitle(), 0)
                     .flatMap(slug -> {
                         spec.setSlug(slug);
-                        renderContentHtml(spec);
                         doc.setSpec(spec);
                         if (doc.getMetadata() != null) {
                             MetadataUtil.nullSafeLabels(doc)
@@ -132,7 +129,6 @@ public class KnowledgeBaseDocService {
                 return Mono.error(
                     new ResponseStatusException(HttpStatus.BAD_REQUEST, "文档标题不能为空"));
             }
-            renderContentHtml(spec);
             existing.setSpec(spec);
             if (PHASE_PUBLISHED.equals(spec.getPhase()) && spec.getPublishTime() == null) {
                 spec.setPublishTime(Instant.now());
@@ -258,22 +254,6 @@ public class KnowledgeBaseDocService {
                     .map(doc -> doc.getSpec().getContent() == null ? ""
                         : doc.getSpec().getContent());
             });
-    }
-
-    /**
-     * 渲染 contentHtml：content 为 Markdown 时用 flexmark 渲染；已是 HTML（旧数据）则直接复用。
-     */
-    private void renderContentHtml(KnowledgeBaseDoc.Spec spec) {
-        String content = spec.getContent();
-        if (!StringUtils.hasText(content)) {
-            spec.setContentHtml("");
-            return;
-        }
-        if (content.stripLeading().startsWith("<")) {
-            spec.setContentHtml(content);
-            return;
-        }
-        spec.setContentHtml(markdownRenderer.render(content));
     }
 
     private Mono<Boolean> wouldCreateCycle(String docName, String parentName) {

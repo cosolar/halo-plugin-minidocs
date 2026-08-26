@@ -9,21 +9,12 @@
     "type-check": "vue-tsc --noEmit"
   },
   "dependencies": {
-    "@bytemd/plugin-gfm": "^1.22.0",
-    "@bytemd/plugin-highlight": "^1.22.0",
-    "@bytemd/plugin-math": "^1.22.0",
-    "@bytemd/plugin-mermaid": "^1.22.0",
-    "@bytemd/vue-next": "^1.22.0",
     "@halo-dev/api-client": "^2.26.0",
     "@halo-dev/components": "^2.26.0",
     "@halo-dev/ui-shared": "^2.26.0",
     "axios": "^1.7.0",
-    "bytemd": "^1.22.0",
-    "highlight.js": "^11.12.0",
-    "katex": "^0.18.4",
-    "marked": "^18.0.10",
-    "marked-highlight": "^2.2.4",
-    "mermaid": "^11.17.0",
+    "cherry-markdown": "^0.11.10",
+    "mermaid": "^11.17.1",
     "turndown": "^7.2.4",
     "vue": "^3.5.0",
     "vue-router": "^4.4.0"

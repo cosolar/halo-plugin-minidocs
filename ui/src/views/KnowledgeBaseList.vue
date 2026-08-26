@@ -6,8 +6,6 @@ import {
   Toast,
   VButton,
   VCard,
-  VDropdown,
-  VDropdownItem,
   VEmpty,
   VLoading,
   VModal,
@@ -23,7 +21,6 @@ import {
   IconSearch,
   IconGrid,
   IconList,
-  IconMore,
   IconEye,
   IconLockPasswordLine,
   IconArrowRight,
@@ -679,21 +676,12 @@ onMounted(() => {
                   编辑
                 </VButton>
               </span>
-              <VDropdown>
-                <VButton size="sm" type="default">
-                  <template #icon>
-                    <IconMore class="h-4 w-4" />
-                  </template>
-                </VButton>
-                <template #popper>
-                  <VDropdownItem type="danger" @click="remove(kb)">
-                    <template #prefix-icon>
-                      <IconDeleteBin class="h-4 w-4" />
-                    </template>
-                    删除
-                  </VDropdownItem>
+              <VButton size="sm" type="danger" @click="remove(kb)">
+                <template #icon>
+                  <IconDeleteBin class="h-4 w-4" />
                 </template>
-              </VDropdown>
+                删除
+              </VButton>
             </VSpace>
           </div>
         </template>
@@ -766,21 +754,12 @@ onMounted(() => {
                   编辑
                 </VButton>
               </span>
-              <VDropdown>
-                <VButton size="sm" type="default" @click.stop>
-                  <template #icon>
-                    <IconMore class="h-4 w-4" />
-                  </template>
-                </VButton>
-                <template #popper>
-                  <VDropdownItem type="danger" @click="remove(kb)">
-                    <template #prefix-icon>
-                      <IconDeleteBin class="h-4 w-4" />
-                    </template>
-                    删除
-                  </VDropdownItem>
+              <VButton size="sm" type="danger" @click.stop="remove(kb)">
+                <template #icon>
+                  <IconDeleteBin class="h-4 w-4" />
                 </template>
-              </VDropdown>
+                删除
+              </VButton>
             </VSpace>
           </div>
         </template>

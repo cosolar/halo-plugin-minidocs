@@ -1,36 +1,23 @@
 <template>
-  <div class="markdown-editor-wrapper" ref="wrapperRef">
-    <Editor
-      :value="value"
-      :plugins="plugins"
-      :locale="locale"
-      :placeholder="placeholder"
-      :status="false"
-      @change="handleChange"
-    />
+  <div class="markdown-editor-wrapper">
+    <div class="cherry-host" :id="hostId" ref="hostRef"></div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from "vue";
-import { Editor } from "@bytemd/vue-next";
-import gfm from "@bytemd/plugin-gfm";
-import highlight from "@bytemd/plugin-highlight";
-import mermaid from "@bytemd/plugin-mermaid";
-import math from "@bytemd/plugin-math";
-import zh_Hans from "bytemd/locales/zh_Hans.json";
-import "bytemd/dist/index.css";
-import "highlight.js/styles/github.css";
-import "katex/dist/katex.min.css";
+import { onBeforeUnmount, onMounted, ref, watch } from "vue";
+import Cherry from "cherry-markdown/dist/cherry-markdown.core.esm.js";
+import "cherry-markdown/dist/cherry-markdown.css";
 
 const props = withDefaults(
   defineProps<{
     content?: string;
-    placeholder?: string;
+    // 初始/当前视图模型：edit=分屏实时预览，preview=只读预览
+    model?: "edit" | "preview";
   }>(),
   {
     content: "",
-    placeholder: "使用 Markdown 编写文档内容...",
+    model: "edit",
   }
 );
 
@@ -38,51 +25,158 @@ const emit = defineEmits<{
   (e: "update:content", value: string): void;
 }>();
 
-const plugins = [gfm(), highlight(), mermaid(), math()];
-const locale = zh_Hans;
+const hostRef = ref<HTMLElement | null>(null);
+const hostId = `cherry-md-${Math.random().toString(36).slice(2, 10)}`;
 
-const value = ref(props.content || "");
+let cherry: Cherry | null = null;
 
+// core 包不带 mermaid 渲染，需显式注册 MermaidPlugin 并把 mermaid 实例传给 Cherry。
+// MermaidPlugin 运行时由 core 模块导出，但其子路径 .d.ts 未声明，故运行时动态取。
+let mermaidPluginReady = false;
+async function ensureMermaidPlugin() {
+  if (mermaidPluginReady) {
+    return;
+  }
+  const mermaidMod = await import("cherry-markdown/dist/cherry-markdown.core.esm.js");
+  const mermaidPlugin = (mermaidMod as unknown as { MermaidPlugin: unknown }).MermaidPlugin;
+  const mermaidInstance = (await import("mermaid")).default;
+  Cherry.usePlugin(mermaidPlugin as never, { mermaid: mermaidInstance });
+  mermaidPluginReady = true;
+}
+
+onMounted(async () => {
+  if (!hostRef.value) {
+    return;
+  }
+  await ensureMermaidPlugin();
+  // 等待期间组件可能已被卸载，避免在已销毁的挂载点上初始化
+  if (!hostRef.value.isConnected) {
+    return;
+  }
+  cherry = new Cherry({
+    id: hostId,
+    value: props.content || "",
+    editor: {
+      // 分屏实时预览：左侧源码编辑，右侧实时渲染（mermaid/公式/代码高亮由 cherry 懒渲染）
+      defaultModel: "edit&preview",
+    },
+    toolbars: {
+      // 编辑模式工具栏：聚焦 Markdown 排版；内置「编辑/预览切换」「导出」由 cherry 提供
+      toolbar: [
+        "h1",
+        "h2",
+        "h3",
+        "|",
+        "bold",
+        "italic",
+        "strikethrough",
+        "|",
+        "ul",
+        "ol",
+        "checklist",
+        "quote",
+        "|",
+        "code",
+        "formula",
+        "graph",
+        "image",
+        "link",
+        "table",
+        "hr",
+        "|",
+        "undo",
+        "redo",
+      ],
+      toolbarRight: ["togglePreview", "|", "export"],
+    },
+    callback: {
+      afterChange: (markdown: string) => {
+        emit("update:content", markdown);
+      },
+    },
+  });
+  // 初始视图为只读预览时，直接切到 previewOnly
+  if (props.model === "preview") {
+    cherry.switchModel("previewOnly");
+  }
+});
+
+// 由父组件控制顶部「预览/编辑」切换
 watch(
-  () => props.content,
-  (val) => {
-    if (val !== value.value) {
-      value.value = val || "";
+  () => props.model,
+  (m) => {
+    if (!cherry) {
+      return;
+    }
+    if (m === "preview") {
+      cherry.switchModel("previewOnly");
+    } else {
+      cherry.switchModel("edit&preview");
     }
   }
 );
 
-function handleChange(v: string) {
-  value.value = v;
-  emit("update:content", v);
-}
+// 确保外部 setContent 不回写文本导致 afterChange 循环
+watch(
+  () => props.content,
+  (val) => {
+    if (cherry && val !== cherry.getMarkdown()) {
+      cherry.setMarkdown(val || "");
+    }
+  }
+);
 
-const wrapperRef = ref<HTMLElement | null>(null);
+onBeforeUnmount(() => {
+  cherry?.destroy();
+  cherry = null;
+});
 
 function getContent() {
-  return value.value;
+  return cherry ? cherry.getMarkdown() : "";
+}
+
+function getHtml() {
+  return cherry ? cherry.getHtml() : "";
 }
 
 function setContent(content: string) {
-  value.value = content || "";
+  if (cherry) {
+    cherry.setMarkdown(content || "");
+  }
 }
 
-// 同时滚动编辑区与预览区到顶部（替代 bytemd 状态栏的「回到顶部」）
+function switchToPreview() {
+  cherry?.switchModel("previewOnly");
+}
+
+function switchToEdit() {
+  cherry?.switchModel("edit&preview");
+}
+
 function scrollToTop() {
-  const wrapper = wrapperRef.value;
-  if (!wrapper) {
+  if (!cherry || !hostRef.value) {
     return;
   }
-  const editorScroll = wrapper.querySelector<HTMLElement>(".CodeMirror-scroll");
-  const preview = wrapper.querySelector<HTMLElement>(".bytemd-preview");
-  editorScroll?.scrollTo({ top: 0 });
-  preview?.scrollTo({ top: 0 });
+  // 先尝试滚编辑区（CodeMirror）
+  const view = cherry.getCodeMirror() as { scrollDOM?: HTMLElement } | undefined;
+  if (view?.scrollDOM) {
+    view.scrollDOM.scrollTop = 0;
+    return;
+  }
+  // 只读预览下滚预览内容容器
+  const preview = hostRef.value.querySelector<HTMLElement>(".cherry-previewer");
+  if (preview) {
+    preview.scrollTop = 0;
+  }
 }
 
 defineExpose({
   getContent,
+  getHtml,
   setContent,
   scrollToTop,
+  switchToPreview,
+  switchToEdit,
 });
 </script>
 
@@ -91,88 +185,18 @@ defineExpose({
   position: relative;
   flex: 1 1 auto;
   min-height: 0;
+  overflow: hidden;
   background: #ffffff;
-  overflow: hidden;
 }
 
-/* 绝对定位让 bytemd 精确填充容器，高度由外层 flex 链确定 */
-.markdown-editor-wrapper :deep(.bytemd) {
-  position: absolute !important;
-  top: 0 !important;
-  left: 0 !important;
-  right: 0 !important;
-  bottom: 0 !important;
-  height: 100% !important;
-  overflow: hidden;
-  border: none;
-  border-radius: 0;
-}
-
-/* 用 bytemd 原生高度机制：body 占满除工具栏外的空间（状态栏已隐藏） */
-.markdown-editor-wrapper :deep(.bytemd-body) {
-  height: calc(100% - 40px);
-  overflow: auto;
-}
-
-.markdown-editor-wrapper :deep(.bytemd-editor),
-.markdown-editor-wrapper :deep(.bytemd-preview) {
+/* 挂载容器精确填满外层 flex 链 */
+.cherry-host {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
   height: 100%;
-  min-height: 0;
-}
-
-.markdown-editor-wrapper :deep(.bytemd-editor .CodeMirror) {
-  font-size: 15px;
-  line-height: 1.8;
-}
-
-/* 编辑器滚动条样式 */
-.markdown-editor-wrapper :deep(.bytemd-body),
-.markdown-editor-wrapper :deep(.bytemd-preview),
-.markdown-editor-wrapper :deep(.CodeMirror-scroll) {
-  scrollbar-width: thin;
-  scrollbar-color: #d9d9d9 transparent;
-}
-
-/* Mermaid 图表容器 */
-.markdown-editor-wrapper :deep(.bytemd-mermaid) {
-  display: flex;
-  justify-content: center;
-  margin: 1em 0;
-  padding: 1em;
-  background: #ffffff;
-  border: 1px solid #eef0f3;
-  border-radius: 10px;
-  overflow-x: auto;
-}
-
-.markdown-editor-wrapper :deep(.bytemd-mermaid svg) {
-  max-width: 100%;
-  height: auto;
-}
-
-.markdown-editor-wrapper :deep(.bytemd-body::-webkit-scrollbar),
-.markdown-editor-wrapper :deep(.bytemd-preview::-webkit-scrollbar),
-.markdown-editor-wrapper :deep(.CodeMirror-scroll::-webkit-scrollbar) {
-  width: 8px;
-  height: 8px;
-}
-
-.markdown-editor-wrapper :deep(.bytemd-body::-webkit-scrollbar-thumb),
-.markdown-editor-wrapper :deep(.bytemd-preview::-webkit-scrollbar-thumb),
-.markdown-editor-wrapper :deep(.CodeMirror-scroll::-webkit-scrollbar-thumb) {
-  background: #d9d9d9;
-  border-radius: 4px;
-}
-
-.markdown-editor-wrapper :deep(.bytemd-body::-webkit-scrollbar-thumb:hover),
-.markdown-editor-wrapper :deep(.bytemd-preview::-webkit-scrollbar-thumb:hover),
-.markdown-editor-wrapper :deep(.CodeMirror-scroll::-webkit-scrollbar-thumb:hover) {
-  background: #bfbfbf;
-}
-
-.markdown-editor-wrapper :deep(.bytemd-body::-webkit-scrollbar-track),
-.markdown-editor-wrapper :deep(.bytemd-preview::-webkit-scrollbar-track),
-.markdown-editor-wrapper :deep(.CodeMirror-scroll::-webkit-scrollbar-track) {
-  background: transparent;
+  overflow: auto;
 }
 </style>

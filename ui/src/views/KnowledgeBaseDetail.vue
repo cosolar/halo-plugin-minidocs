@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, nextTick, onMounted, reactive, ref } from "vue";
+import { computed, defineAsyncComponent, nextTick, onMounted, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import {
   Dialog,
@@ -28,14 +28,13 @@ import {
   IconBookRead,
   IconInformation,
 } from "@halo-dev/components";
-import { axiosInstance, consoleApiClient } from "@halo-dev/api-client";
+import { axiosInstance } from "@halo-dev/api-client";
 import { utils } from "@halo-dev/ui-shared";
-import DocPreview from "../components/DocPreview.vue";
-// bytemd 体积较大，按需懒加载
+// cherry-markdown 完整包体积较大，按需懒加载
 const MarkdownEditor = defineAsyncComponent(
   () => import("../components/MarkdownEditor.vue")
 );
-import { htmlToMarkdown, markdownToHtml } from "../utils/markdown";
+import { htmlToMarkdown } from "../utils/markdown";
 
 interface KnowledgeBase {
   metadata: { name: string };
@@ -65,6 +64,7 @@ interface KnowledgeBaseDoc {
     title: string;
     slug?: string;
     content?: string;
+    contentHtml?: string;
     parentName?: string;
     priority?: number;
     tags?: string[];
@@ -109,8 +109,11 @@ const wordCount = ref(0);
 // Markdown 编辑器引用（懒加载组件）
 const markdownEditorRef = ref<{
   getContent: () => string;
+  getHtml: () => string;
   setContent: (c: string) => void;
   scrollToTop: () => void;
+  switchToPreview: () => void;
+  switchToEdit: () => void;
 } | null>(null);
 
 const expanded = ref<Set<string>>(new Set());
@@ -120,11 +123,8 @@ const allExpanded = ref(false);
 const searchKeyword = ref("");
 let searchTimer: ReturnType<typeof setTimeout> | null = null;
 
-// 编辑 / 预览（默认预览模式）
+// 编辑 / 预览（默认预览模式，由 cherry 实例在两个视图模型间切换）
 const previewMode = ref(true);
-
-// 预览阅读宽度（来自插件设置，默认 960px）
-const previewWidth = ref(960);
 
 // 保存状态
 const saveStatus = ref<"saved" | "unsaved" | "saving">("saved");
@@ -146,8 +146,8 @@ const saveStatusLabel = computed(() => {
   return "未保存";
 });
 
-// 预览内容：Markdown 实时转换
-const previewHtml = computed(() => markdownToHtml(docForm.markdown));
+// 预览/编辑由编辑器内的同一 cherry 实例在两个视图模型间切换，预览渲染交给 cherry
+const currentEditorModel = computed(() => (previewMode.value ? "preview" : "edit"));
 
 // 当前文档路径（知识库名 / 目录 / 文档名）
 const docPath = computed(() => {
@@ -395,22 +395,6 @@ async function loadTree() {
   }
 }
 
-// 读取插件设置（预览阅读宽度等）
-async function loadPluginConfig() {
-  try {
-    const { data } = await consoleApiClient.plugin.plugin.fetchPluginJsonConfig({
-      name: "halo-plugin-minidocs",
-    });
-    const basic = (data as Record<string, Record<string, unknown>>)?.basic || {};
-    const width = Number(basic.previewWidth);
-    if (width && width > 0) {
-      previewWidth.value = width;
-    }
-  } catch (err) {
-    // 读取失败时使用默认宽度
-  }
-}
-
 async function selectDoc(node: DocTreeNode) {
   selected.value = node;
   docLoading.value = true;
@@ -449,7 +433,7 @@ async function saveDoc() {
   }
   saving.value = true;
   try {
-    // 从 Markdown 编辑器获取最新内容，直接以 Markdown 原始文本保存
+    // 从 Markdown 编辑器获取最新内容：以原样 Markdown 保存，并用 cherry 渲染出的 HTML 持久化
     const markdown = markdownEditorRef.value?.getContent() || docForm.markdown;
     docForm.markdown = markdown;
     docForm.content = markdown;
@@ -458,6 +442,7 @@ async function saveDoc() {
         ...doc.value?.spec,
         title: docForm.title,
         content: markdown,
+        contentHtml: markdownEditorRef.value?.getHtml() || "",
         slug: docForm.slug.trim() || undefined,
         tags: tags.value,
         priority: docForm.priority === "" ? undefined : Number(docForm.priority),
@@ -553,6 +538,7 @@ async function duplicateDoc() {
       title: `${doc.value.spec.title} 副本`,
       slug: doc.value.spec.slug ? `${doc.value.spec.slug}-copy` : undefined,
       content: doc.value.spec.content,
+      contentHtml: doc.value.spec.contentHtml,
       parentName: doc.value.spec.parentName,
       priority: doc.value.spec.priority,
       tags: doc.value.spec.tags,
@@ -687,6 +673,7 @@ async function saveSettings() {
         ...doc.value.spec,
         title: docForm.title,
         content: markdown,
+        contentHtml: markdownEditorRef.value?.getHtml() || "",
         slug: docForm.slug.trim() || undefined,
         tags: tags.value,
         priority: docForm.priority === "" ? undefined : Number(docForm.priority),
@@ -726,7 +713,7 @@ function onTagBackspace() {
 }
 
 onMounted(async () => {
-  await Promise.all([loadKb(), loadTree(), loadPluginConfig()]);
+  await Promise.all([loadKb(), loadTree()]);
 });
 </script>
 
@@ -951,18 +938,15 @@ onMounted(async () => {
             </div>
           </div>
 
-          <!-- 编辑器 / 预览 -->
+          <!-- 编辑器：编辑=分屏实时预览，预览=cherry 只读，同一实例切换 -->
           <div class="editor-wrapper">
-            <div v-show="!previewMode" class="editor-container">
+            <div class="editor-container">
               <MarkdownEditor
                 ref="markdownEditorRef"
                 :content="docForm.markdown"
-                placeholder="使用 Markdown 编写文档内容..."
+                :model="currentEditorModel"
                 @update:content="onMarkdownUpdate"
               />
-            </div>
-            <div v-show="previewMode" class="preview-container">
-              <DocPreview :html="previewHtml" :width="previewWidth" :visible="previewMode" />
             </div>
           </div>
 
@@ -1575,14 +1559,6 @@ onMounted(async () => {
   flex: 1 1 auto;
   display: flex;
   flex-direction: column;
-  min-height: 0;
-  overflow: hidden;
-}
-
-/* 预览 */
-.preview-container {
-  flex: 1 1 auto;
-  display: flex;
   min-height: 0;
   overflow: hidden;
 }
