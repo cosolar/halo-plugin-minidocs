@@ -12,6 +12,8 @@ import "cherry-markdown/dist/cherry-markdown.css";
 // 需显式传入 katex 并引入其样式，否则公式块退化为纯文本。
 import katex from "katex";
 import "katex/dist/katex.min.css";
+// Halo 附件上传：使用控制台 API 上传到默认存储策略，返回 Attachment 的公开访问地址
+import { consoleApiClient } from "@halo-dev/api-client";
 
 const props = withDefaults(
   defineProps<{
@@ -58,6 +60,18 @@ async function ensureMermaidPluginRegistered() {
 
 const cherryReadyPromise = ensureMermaidPluginRegistered();
 
+// 通过 Halo 控制台附件接口上传到默认存储策略，返回附件公开访问地址（permalink）
+async function uploadFileToHalo(file: File): Promise<string> {
+  const { data } = await consoleApiClient.storage.attachment.uploadAttachmentForConsole({
+    file,
+  });
+  const url = data.status?.permalink;
+  if (!url) {
+    throw new Error(`附件上传失败：${file.name}`);
+  }
+  return url;
+}
+
 onMounted(async () => {
   if (!hostRef.value) {
     return;
@@ -76,6 +90,14 @@ onMounted(async () => {
     },
     // 公式渲染依赖外部 KaTeX 实例：cherry 的 mathBlock/inlineMath 从 externals.katex 取 API
     externals: { katex },
+    // 图片/文件上传：点击工具栏、拖拽或粘贴图片时调用，上传到 Halo 附件后回填公开地址
+    fileUpload: (file: File, callback) => {
+      uploadFileToHalo(file)
+        .then((url) => callback(url, { name: file.name }))
+        .catch((e) => {
+          console.error("附件上传失败", e);
+        });
+    },
     engine: {
       syntax: {
         codeBlock: {
@@ -128,6 +150,26 @@ onMounted(async () => {
     callback: {
       afterChange: (markdown: string) => {
         emit("update:content", markdown);
+      },
+      // 多文件上传：工具栏选择多张图片时批量上传到 Halo 附件
+      // 注意：cherry 的 fileUploadMulti 回调运行时接收 {url, params}[] 数组，但其类型声明
+      // 误写成了单 url 字符串，这里按运行时行为断言回调参数类型
+      fileUploadMulti: (files: File[], callback) => {
+        const cb = callback as unknown as (
+          results: { url: string; params?: { name?: string } }[]
+        ) => void;
+        Promise.all(files.map(uploadFileToHalo))
+          .then((urls) =>
+            cb(
+              urls.map((url, i) => ({
+                url,
+                params: { name: files[i].name },
+              }))
+            )
+          )
+          .catch((e) => {
+            console.error("附件上传失败", e);
+          });
       },
     },
   });
