@@ -14,6 +14,7 @@
     "@halo-dev/ui-shared": "^2.26.0",
     "axios": "^1.7.0",
     "cherry-markdown": "^0.11.10",
+    "katex": "^0.18.4",
     "mermaid": "^11.17.1",
     "turndown": "^7.2.4",
     "vue": "^3.5.0",

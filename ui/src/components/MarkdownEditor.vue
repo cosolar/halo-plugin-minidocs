@@ -8,6 +8,10 @@
 import { onBeforeUnmount, onMounted, ref, watch } from "vue";
 import Cherry from "cherry-markdown/dist/cherry-markdown.core.esm.js";
 import "cherry-markdown/dist/cherry-markdown.css";
+// 公式渲染：cherry 的 mathBlock/inlineMath 通过 externals.katex 或 window.katex 取 KaTeX 实例，
+// 需显式传入 katex 并引入其样式，否则公式块退化为纯文本。
+import katex from "katex";
+import "katex/dist/katex.min.css";
 
 const props = withDefaults(
   defineProps<{
@@ -70,6 +74,8 @@ onMounted(async () => {
       // 分屏实时预览：左侧源码编辑，右侧实时渲染（mermaid/公式/代码高亮由 cherry 懒渲染）
       defaultModel: "edit&preview",
     },
+    // 公式渲染依赖外部 KaTeX 实例：cherry 的 mathBlock/inlineMath 从 externals.katex 取 API
+    externals: { katex },
     engine: {
       syntax: {
         codeBlock: {
@@ -78,6 +84,9 @@ onMounted(async () => {
           changeLang: false,    // 是否显示语言切换
           editCode: false,      // 是否显示编辑按钮
         },
+        // 公式引擎：块级 $$...$$ 与行内 $...$ 均用 KaTeX 渲染（默认 MathJax 需额外加载脚本）
+        mathBlock: { engine: "katex", selfClosing: false },
+        inlineMath: { engine: "katex" },
       },
     },
     toolbars: {
@@ -104,10 +113,17 @@ onMounted(async () => {
         "table",
         "hr",
         "|",
+        "toc",
         "undo",
         "redo",
       ],
       toolbarRight: ["togglePreview", "|", "export"],
+      // 悬浮目录：full=完整展示所有标题，position=absolute 跟随 cherry 内部滚动条
+      toc: {
+        defaultModel: "full",
+        position: "absolute",
+        updateLocationHash: false,
+      },
     },
     callback: {
       afterChange: (markdown: string) => {

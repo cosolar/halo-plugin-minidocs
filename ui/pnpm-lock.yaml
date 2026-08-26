@@ -23,6 +23,9 @@ importers:
       cherry-markdown:
         specifier: ^0.11.10
         version: 0.11.10(supports-color@8.1.1)
+      katex:
+        specifier: ^0.18.4
+        version: 0.18.4
       mermaid:
         specifier: ^11.17.1
         version: 11.17.1
@@ -1750,6 +1753,10 @@ packages:
 
   katex@0.16.47:
     resolution: {integrity: sha512-Eeo8Ys1doU1z+x8AZsPpQu+p/QcZBI5PeOo7QGQdy2x2m0MU/hYagBbGOmXwr5KVbEfVuWv9LpnQWeehogurjg==}
+    hasBin: true
+
+  katex@0.18.4:
+    resolution: {integrity: sha512-IMPntbRLOU+eu88XDiFKqQ8Akhr9Tv7jDMXqPhjG9SI1JMA4DIgXk4x9k4skJz2NZJXBRbC+2pYBLj9olqcZow==}
     hasBin: true
 
   khroma@2.1.0:
@@ -4167,6 +4174,10 @@ snapshots:
   json-schema-traverse@1.0.0: {}
 
   katex@0.16.47:
+    dependencies:
+      commander: 8.3.0
+
+  katex@0.18.4:
     dependencies:
       commander: 8.3.0
 
