@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, nextTick, onMounted, reactive, ref, watch } from "vue";
+import { computed, defineAsyncComponent, onMounted, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import {
   Dialog,
@@ -104,7 +104,10 @@ const moveModalVisible = ref(false);
 const createModalVisible = ref(false);
 const createTitle = ref("");
 const parentTarget = ref<DocTreeNode | null>(null);
-const wordCount = ref(0);
+// 字数惰性计算，避免每字符输入都对大字符串 replace 一次
+const wordCount = computed(() =>
+  docForm.markdown ? docForm.markdown.replace(/\s/g, "").length : 0
+);
 
 // Markdown 编辑器引用（懒加载组件）
 const markdownEditorRef = ref<{
@@ -351,7 +354,6 @@ function formatDate(time?: string) {
 
 function onMarkdownUpdate(markdown: string) {
   docForm.markdown = markdown;
-  wordCount.value = markdown.replace(/\s/g, "").length;
   saveStatus.value = "unsaved";
 }
 
@@ -410,12 +412,10 @@ async function selectDoc(node: DocTreeNode) {
     docForm.priority = data.spec.priority?.toString() || "";
     moveParent.value = data.spec.parentName || "";
     tags.value = data.spec.tags || [];
-    wordCount.value = docForm.markdown.replace(/\s/g, "").length;
     saveStatus.value = "saved";
     previewMode.value = true;
-    // 同步到 Markdown 编辑器
-    await nextTick();
-    markdownEditorRef.value?.setContent(docForm.markdown);
+    // 内容已通过 `:content` prop 绑定并由编辑器内部 watch 注入，
+    // 这里不再手动 setContent，避免大文档重复全量渲染
   } finally {
     docLoading.value = false;
   }
@@ -440,6 +440,7 @@ async function saveDoc() {
     const payload = {
       spec: {
         ...doc.value?.spec,
+        knowledgeBaseName: kbName,
         title: docForm.title,
         content: markdown,
         contentHtml: markdownEditorRef.value?.getHtml() || "",
@@ -454,9 +455,11 @@ async function saveDoc() {
     );
     Toast.success("文档已保存");
     saveStatus.value = "saved";
-    wordCount.value = markdown.replace(/\s/g, "").length;
+    // 乐观更新本地 spec，避免保存后 refreshSelected 触发整篇大文档全量重渲染
+    if (doc.value) {
+      doc.value.spec = payload.spec;
+    }
     await loadTree();
-    await refreshSelected();
   } finally {
     saving.value = false;
   }
@@ -470,8 +473,10 @@ async function publishDoc() {
     `${API_PREFIX}/knowledgebases/${kbName}/docs/${selected.value.name}/publish`
   );
   Toast.success("文档已发布");
+  if (doc.value) {
+    doc.value.spec.phase = "published";
+  }
   await loadTree();
-  await refreshSelected();
 }
 
 // 归档 / 取消归档（直接更新 phase）
@@ -490,8 +495,10 @@ async function setPhase(phase: string, tip: string) {
     payload
   );
   Toast.success(tip);
+  if (doc.value) {
+    doc.value.spec.phase = phase;
+  }
   await loadTree();
-  await refreshSelected();
 }
 
 function archiveDoc() {
@@ -522,8 +529,10 @@ async function confirmMove() {
   );
   Toast.success("文档已移动");
   moveModalVisible.value = false;
+  if (doc.value) {
+    doc.value.spec.parentName = moveParent.value || undefined;
+  }
   await loadTree();
-  await refreshSelected();
 }
 
 // 复制文档：创建新文档并复制内容
@@ -636,10 +645,11 @@ async function confirmRename() {
     );
     Toast.success("文档已重命名");
     renameModalVisible.value = false;
-    await loadTree();
-    if (selected.value?.name === target.name) {
-      await refreshSelected();
+    if (doc.value) {
+      doc.value.spec.title = title;
     }
+    docForm.title = title;
+    await loadTree();
   } catch (err) {
     Toast.error("重命名失败，请重试");
   }
@@ -671,6 +681,7 @@ async function saveSettings() {
     const payload = {
       spec: {
         ...doc.value.spec,
+        knowledgeBaseName: kbName,
         title: docForm.title,
         content: markdown,
         contentHtml: markdownEditorRef.value?.getHtml() || "",
@@ -686,8 +697,10 @@ async function saveSettings() {
     Toast.success("文档设置已保存");
     saveStatus.value = "saved";
     settingsVisible.value = false;
+    if (doc.value) {
+      doc.value.spec = payload.spec;
+    }
     await loadTree();
-    await refreshSelected();
   } finally {
     saving.value = false;
   }

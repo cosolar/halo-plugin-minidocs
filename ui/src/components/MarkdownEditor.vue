@@ -30,25 +30,35 @@ const hostId = `cherry-md-${Math.random().toString(36).slice(2, 10)}`;
 
 let cherry: Cherry | null = null;
 
-// core 包不带 mermaid 渲染，需显式注册 MermaidPlugin 并把 mermaid 实例传给 Cherry。
-// MermaidPlugin 运行时由 core 模块导出，但其子路径 .d.ts 未声明，故运行时动态取。
-let mermaidPluginReady = false;
-async function ensureMermaidPlugin() {
-  if (mermaidPluginReady) {
+// Cherry.usePlugin 是静态全局注册，一旦任何 Cherry 实例被创建（Cherry.initialized=true）
+// 就禁止再次调用。懒加载组件在路由切换/重挂载时可能被重复 import（模块重新求值），
+// 若用模块级 async IIFE 会二次执行 usePlugin 而报错。故用 window 级守卫，
+// 确保 mermaid 插件在整页全局生命周期内只注册一次。
+const PLUGIN_REGISTERED_KEY = "__minidocsCherryMermaidRegistered__";
+
+async function ensureMermaidPluginRegistered() {
+  const g = window as unknown as Record<string, unknown>;
+  if (g[PLUGIN_REGISTERED_KEY]) {
     return;
   }
+  g[PLUGIN_REGISTERED_KEY] = true;
   const mermaidMod = await import("cherry-markdown/dist/cherry-markdown.core.esm.js");
   const mermaidPlugin = (mermaidMod as unknown as { MermaidPlugin: unknown }).MermaidPlugin;
+  // import("mermaid") 返回的是模块命名空间，顶层只有 default/clearLayoutRenderState 等，
+  // 不含 render/initialize；MermaidPlugin 构造时会调用 this.mermaidAPIRefs.initialize，
+  // 若直接传命名空间对象会抛 "initialize is not a function"。必须取 .default（真正的
+  // mermaid API 对象）并显式传 mermaidAPI，否则插件 mermaidAPIRefs=null 或构造失败。
   const mermaidInstance = (await import("mermaid")).default;
-  Cherry.usePlugin(mermaidPlugin as never, { mermaid: mermaidInstance });
-  mermaidPluginReady = true;
+  Cherry.usePlugin(mermaidPlugin as never, { mermaidAPI: mermaidInstance });
 }
+
+const cherryReadyPromise = ensureMermaidPluginRegistered();
 
 onMounted(async () => {
   if (!hostRef.value) {
     return;
   }
-  await ensureMermaidPlugin();
+  await cherryReadyPromise;
   // 等待期间组件可能已被卸载，避免在已销毁的挂载点上初始化
   if (!hostRef.value.isConnected) {
     return;
@@ -59,6 +69,16 @@ onMounted(async () => {
     editor: {
       // 分屏实时预览：左侧源码编辑，右侧实时渲染（mermaid/公式/代码高亮由 cherry 懒渲染）
       defaultModel: "edit&preview",
+    },
+    engine: {
+      syntax: {
+        codeBlock: {
+          // 每个 mermaid 图块顶部显示「预览 / 源码」切换
+          mermaid: { showSourceToolbar: true },
+          changeLang: false,    // 是否显示语言切换
+          editCode: false,      // 是否显示编辑按钮
+        },
+      },
     },
     toolbars: {
       // 编辑模式工具栏：聚焦 Markdown 排版；内置「编辑/预览切换」「导出」由 cherry 提供
