@@ -27,10 +27,12 @@
 
 ### 匿名访问说明
 
-公共 API 仅暴露 `publicVisible=true` 的知识库及其 `phase=published` 的文档。是否允许匿名读取由插件设置的「允许未登录用户阅读公开知识库」（`BasicSetting.anonymousReadEnabled`）控制：
+公共 API 仅暴露 `publicVisible=true` 的知识库及其 `phase=published` 的文档。是否允许匿名读取由插件基础设置项 `allowAnonymousRead`（`settings.yaml` 中 `basic.allowAnonymousRead`）控制，由 `BasicSetting.anonymousReadEnabled()` 方法判断（字段为 `null` 时兜底为开启）：
 
-- 开启时（默认），匿名用户可直接访问上述接口。
-- 关闭时，未登录访问会被服务层二次校验拦截并返回 `403`，已登录用户仍可正常访问。
+- 设置为 `true`（或字段缺失为空）时，匿名用户可直接访问上述接口。
+- 设置为 `false` 时，未登录访问会被服务层二次校验拦截并返回 `403`，已登录用户仍可正常访问。
+
+> 注意：`settings.yaml` 中 `basic.allowAnonymousRead` 的默认值当前为 `false`（即默认关闭匿名阅读）；`anonymousReadEnabled()` 仅在字段为 `null` 时兜底为开启。站点管理员需在「插件设置 → 基础设置」中显式开启后方可对游客开放。
 
 因此主题在调用公共 API 时应处理 `403`：引导用户登录，或提示站点管理员开启匿名阅读。查询接口只授予读取权限，不提供创建、修改或删除。
 
@@ -72,6 +74,9 @@ Console API 位于 `console.api.minidocs.halo.run/v1alpha1`，供 Console 前端
 | `/apis/console.api.minidocs.halo.run/v1alpha1/knowledgebases` | `POST` | 创建知识库 |
 | `/apis/console.api.minidocs.halo.run/v1alpha1/knowledgebases/{name}` | `PUT` | 整体更新知识库 `spec` |
 | `/apis/console.api.minidocs.halo.run/v1alpha1/knowledgebases/{name}` | `DELETE` | 删除知识库（级联删除其下文档） |
+| `/apis/console.api.minidocs.halo.run/v1alpha1/knowledgebases/import` | `POST` | 批量导入整个知识库（multipart ZIP 上传，创建新知识库及其文档） |
+| `/apis/console.api.minidocs.halo.run/v1alpha1/knowledgebases/import/preview` | `POST` | 导入预览（multipart ZIP 上传，仅解析并返回待导入内容清单，不写入） |
+| `/apis/console.api.minidocs.halo.run/v1alpha1/knowledgebases/export` | `POST` | 导出整个知识库为 ZIP（受基础设置项 `allowDocExport` 约束） |
 
 #### 文档（`KnowledgeBaseDocConsoleEndpoint`）
 
@@ -96,8 +101,9 @@ Console API 位于 `console.api.minidocs.halo.run/v1alpha1`，供 Console 前端
 | --- | --- | --- |
 | `role-template-minidocs-view` | 知识库查看 | 对 `knowledgebases` / `knowledgebasedocs` 及其子资源的 `get` / `list` |
 | `role-template-minidocs-manage` | 知识库管理 | 在 view 基础上增加 `create` / `update` / `patch` / `delete` 等写权限；依赖 view |
+| `role-template-minidocs-anonymous` | （隐藏） | 聚合到 Halo 匿名用户，授权 `api.minidocs.halo.run` 公共 API 的 `get` / `list`（知识库、文档、文档树等只读），不出现在角色分配界面 |
 
-匿名用户不会获得上述角色；未登录访问 Console API 会被 Halo 网关拦截返回 `401` / `403`。主题若在已登录会话下调用写操作，需确保用户已被授予「知识库管理」角色，否则返回 `403`。
+匿名用户不会获得 view / manage 角色，但会被聚合授予 `role-template-minidocs-anonymous` 以访问公共 API；未登录访问 Console API 会被 Halo 网关拦截返回 `401` / `403`。主题若在已登录会话下调用写操作，需确保用户已被授予「知识库管理」角色，否则返回 `403`。
 
 ### 写操作请求体
 
@@ -144,7 +150,7 @@ Console API 位于 `console.api.minidocs.halo.run/v1alpha1`，供 Console 前端
 
 ### 导出说明
 
-`export` 接口导出单篇文档的 Markdown。若插件设置「允许导出文档」（`allowDocExport`）关闭，该接口与 Console 导出入口均返回 `403`。
+`export` 接口导出单篇文档的 Markdown。若插件设置「允许导出文档」（`allowDocExport`，由 `BasicSetting.docExportEnabled()` 判断，默认 `true`）关闭，单篇 `export` 接口与 Console 导出入口、以及知识库级 `/knowledgebases/export` 均返回 `403`。
 
 ## 标准 CRUD 端点（需要认证）
 

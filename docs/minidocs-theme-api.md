@@ -230,6 +230,7 @@ public class MarkdownRender {
     "priority": 0,
     "creatorName": "admin",
     "cover": "https://example.com/cover.png",
+    "creationTime": "2026-08-01T10:00:00Z",
     "updateTime": "2026-08-20T09:00:00Z"
   },
   "status": {
@@ -258,6 +259,7 @@ public class MarkdownRender {
     "author": "alice",
     "cover": "https://example.com/doc.png",
     "summary": "本文介绍如何快速上手。",
+    "creationTime": "2026-08-10T08:00:00Z",
     "updateTime": "2026-08-22T10:00:00Z",
     "content": "# 快速开始\n...Markdown 原文...",
     "contentHtml": "<h1>快速开始</h1>...服务端渲染后的 HTML...",

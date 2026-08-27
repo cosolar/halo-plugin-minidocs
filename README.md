@@ -1,10 +1,20 @@
-# 知识库 MiniDocs
+<p align="center">
+  <img src="docs/images/logo.png" height="150" alt="logo.png" />
+</p>
+
+<h1 align="center">MiniDocs 知识库</h1>
 
 MiniDocs 是 Halo 2.x 的轻量知识库插件，用于搭建团队 / 个人知识库：多知识库管理、文档树、Markdown 编辑、分类标签与权限控制，并将知识库内容通过公开接口与 Finder 暴露给第三方主题，方便开发用户侧文档站点。
 
 插件同时提供 Console 管理界面、`minidocsFinder` Finder API 和匿名公共 REST API，适用于传统 Thymeleaf 主题和前端框架渲染的文档页。
 
 > 目标平台：Halo `>= 2.26.0`
+
+## 演示界面
+
+![知识库管理界面.png](docs/images/%E7%9F%A5%E8%AF%86%E5%BA%93%E7%AE%A1%E7%90%86%E7%95%8C%E9%9D%A2.png)
+
+![知识库文档管理界面.png](docs/images/%E7%9F%A5%E8%AF%86%E5%BA%93%E6%96%87%E6%A1%A3%E7%AE%A1%E7%90%86%E7%95%8C%E9%9D%A2.png)
 
 ## 功能特性
 
