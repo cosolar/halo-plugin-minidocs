@@ -11,7 +11,7 @@ export default definePlugin({
     {
       parentName: "Root",
       route: {
-        path: "/minidocsui",
+        path: "/minidocs",
         name: "KnowledgeBases",
         component: KnowledgeBaseList,
         meta: {
@@ -30,7 +30,7 @@ export default definePlugin({
     {
       parentName: "Root",
       route: {
-        path: "/minidocsui/:name",
+        path: "/minidocs/:name",
         name: "KnowledgeBaseDetail",
         component: KnowledgeBaseDetail,
         meta: {

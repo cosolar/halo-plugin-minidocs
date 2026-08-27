@@ -64,3 +64,24 @@ halo {
     // suspend = true
     externalUrl = 'http://localhost:8090'
 }
+
+// 构建插件 JAR 后，通过 mininote CLI 直接升级线上 Halo 的插件
+// 使用前需先配置线上服务器：mininote auth login（或 mininote auth login --profile 线上环境名）
+tasks.register('upgradePlugin', Exec) {
+    group = 'halo'
+    description = '构建插件 JAR 并通过 mininote plugin upgrade 升级到线上'
+
+    dependsOn tasks.named('build')
+
+    def pluginJar = layout.buildDirectory.file("libs/${project.name}-${project.version}.jar")
+    inputs.file(pluginJar)
+
+    doFirst {
+        println "正在通过 mininote 升级插件: ${pluginJar.get().asFile.absolutePath}"
+    }
+
+    // Windows 下 mininote 是 npm 安装的 .cmd 脚本，ProcessBuilder 无法直接执行，
+    // 必须通过 cmd /c 包装（mininote 需在 PATH 中）
+    commandLine 'cmd', '/c', 'mininote', 'plugin', 'upgrade', project.name,
+        '--file', pluginJar.get().asFile.absolutePath
+}

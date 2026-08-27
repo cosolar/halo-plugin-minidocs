@@ -103,7 +103,8 @@ public class KnowledgeBaseDocConsoleEndpoint implements CustomEndpoint {
         var kbName = request.pathVariable("name");
         var docName = request.pathVariable("docName");
         return request.bodyToMono(MoveDocRequest.class)
-            .flatMap(move -> docService.move(kbName, docName, move.parentName(), move.priority()))
+            .flatMap(move -> docService.move(kbName, docName, move.parentName(), move.priority(),
+                move.beforeName(), move.afterName()))
             .then(ServerResponse.ok().build());
     }
 
@@ -126,6 +127,7 @@ public class KnowledgeBaseDocConsoleEndpoint implements CustomEndpoint {
     /**
      * 移动文档请求体。
      */
-    public record MoveDocRequest(String parentName, Integer priority) {
+    public record MoveDocRequest(String parentName, Integer priority, String beforeName,
+        String afterName) {
     }
 }

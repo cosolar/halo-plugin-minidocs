@@ -16,6 +16,7 @@
     "cherry-markdown": "^0.11.10",
     "katex": "^0.18.4",
     "mermaid": "^11.17.1",
+    "prismjs": "^1.30.0",
     "turndown": "^7.2.4",
     "vue": "^3.5.0",
     "vue-router": "^4.4.0"
@@ -23,6 +24,7 @@
   "devDependencies": {
     "@halo-dev/ui-plugin-bundler-kit": "^2.26.0",
     "@types/katex": "^0.16.8",
+    "@types/prismjs": "^1.26.6",
     "@types/turndown": "^5.0.6",
     "@unocss/webpack": "^66.8.1",
     "@vitejs/plugin-vue": "^6.0.0",

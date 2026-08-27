@@ -129,9 +129,6 @@ let searchTimer: ReturnType<typeof setTimeout> | null = null;
 // 编辑 / 预览（默认预览模式，由 cherry 实例在两个视图模型间切换）
 const previewMode = ref(true);
 
-// 保存状态
-const saveStatus = ref<"saved" | "unsaved" | "saving">("saved");
-
 // 设置抽屉
 const settingsVisible = ref(false);
 const tags = ref<string[]>([]);
@@ -142,12 +139,6 @@ const tagInputRef = ref<HTMLInputElement | null>(null);
 const renameModalVisible = ref(false);
 const renameTitle = ref("");
 const renameTarget = ref<DocTreeNode | null>(null);
-
-const saveStatusLabel = computed(() => {
-  if (saveStatus.value === "saved") return "已保存";
-  if (saveStatus.value === "saving") return "保存中";
-  return "未保存";
-});
 
 // 预览/编辑由编辑器内的同一 cherry 实例在两个视图模型间切换，预览渲染交给 cherry
 const currentEditorModel = computed(() => (previewMode.value ? "preview" : "edit"));
@@ -302,6 +293,231 @@ function collectSubtree(node: DocTreeNode, set: Set<string>) {
   (node.children || []).forEach((child) => collectSubtree(child, set));
 }
 
+// ===== 拖拽移动（同级排序 / 拖到其他目录下 / 拖到空白处移至顶层） =====
+type DropPosition = "before" | "child" | "after" | "top";
+
+const dragState = reactive({
+  dragging: false,
+  fromName: "",
+  targetName: "", // 当前悬停的目标节点
+  position: "child" as DropPosition, // 目标处的放置位置：之前 / 作为子级 / 之后 / 顶层
+  targetTop: false, // 悬停到空白区域 → 移动到顶层
+});
+
+// 被拖拽节点的整棵子树，用于排除这些节点作为放置目标
+const dragSubtree = computed(() => {
+  const set = new Set<string>();
+  const fromName = dragState.fromName;
+  if (!fromName) {
+    return set;
+  }
+  const find = (nodes: DocTreeNode[]): boolean => {
+    for (const node of nodes) {
+      if (node.name === fromName) {
+        collectSubtree(node, set);
+        return true;
+      }
+      if (find(node.children || [])) {
+        return true;
+      }
+    }
+    return false;
+  };
+  find(tree.value);
+  return set;
+});
+
+function canDropTarget(node: DocTreeNode) {
+  if (!dragState.dragging) {
+    return false;
+  }
+  return node.name !== dragState.fromName && !dragSubtree.value.has(node.name);
+}
+
+// 根据悬停纵向位置判断放置位置：上 30% 之前、中间 40% 子级、下 30% 之后
+function zoneFor(e: DragEvent): DropPosition {
+  const el = e.currentTarget as HTMLElement | null;
+  if (!el || el.clientHeight <= 0) {
+    return "child";
+  }
+  const ratio = e.offsetY / el.clientHeight;
+  if (ratio < 0.3) {
+    return "before";
+  }
+  if (ratio > 0.7) {
+    return "after";
+  }
+  return "child";
+}
+
+function onDragStart(e: DragEvent, node: DocTreeNode) {
+  dragState.fromName = node.name;
+  dragState.dragging = true;
+  dragState.targetName = "";
+  dragState.position = "child";
+  dragState.targetTop = false;
+  if (e.dataTransfer) {
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", node.name);
+  }
+}
+
+function onDragEnter(e: DragEvent, node: DocTreeNode) {
+  if (canDropTarget(node)) {
+    dragState.targetName = node.name;
+    dragState.position = "child";
+    dragState.targetTop = false;
+  }
+}
+
+function onDragOver(e: DragEvent, node: DocTreeNode) {
+  if (!canDropTarget(node)) {
+    if (e.dataTransfer) {
+      e.dataTransfer.dropEffect = "none";
+    }
+    if (dragState.targetName === node.name) {
+      dragState.targetName = "";
+    }
+    // 阻止冒泡，避免悬停在无效节点时被容器误判为「拖到顶层」
+    e.stopPropagation();
+    return;
+  }
+  e.preventDefault();
+  e.stopPropagation();
+  if (e.dataTransfer) {
+    e.dataTransfer.dropEffect = "move";
+  }
+  dragState.targetName = node.name;
+  dragState.position = zoneFor(e);
+}
+
+function onDropOnNode(e: DragEvent, node: DocTreeNode) {
+  e.preventDefault();
+  e.stopPropagation();
+  if (!dragState.dragging || dragState.targetName !== node.name) {
+    resetDrag();
+    return;
+  }
+  performMove(dragState.position, node);
+}
+
+function onListDragOver(e: DragEvent) {
+  if (!dragState.dragging) {
+    return;
+  }
+  e.preventDefault();
+  dragState.targetTop = true;
+  dragState.targetName = "";
+  if (e.dataTransfer) {
+    e.dataTransfer.dropEffect = "move";
+  }
+}
+
+function onListDrop(e: DragEvent) {
+  if (!dragState.dragging) {
+    return;
+  }
+  e.preventDefault();
+  if (dragState.targetTop) {
+    performMove("top", undefined);
+  } else {
+    resetDrag();
+  }
+}
+
+function resetDrag() {
+  dragState.dragging = false;
+  dragState.fromName = "";
+  dragState.targetName = "";
+  dragState.position = "child";
+  dragState.targetTop = false;
+}
+
+function onDragEnd() {
+  resetDrag();
+}
+
+async function performMove(
+  position: DropPosition,
+  target: DocTreeNode | undefined
+) {
+  const movedName = dragState.fromName;
+  resetDrag();
+  if (!movedName) {
+    return;
+  }
+
+  let parentName: string | null = null;
+  let beforeName: string | null = null;
+  let afterName: string | null = null;
+
+  if (position === "top") {
+    parentName = null;
+  } else if (position === "child") {
+    if (!target) {
+      return;
+    }
+    parentName = target.name;
+  } else {
+    if (!target) {
+      return;
+    }
+    parentName = target.parentName || null;
+    if (position === "before") {
+      beforeName = target.name;
+    } else {
+      afterName = target.name;
+    }
+  }
+
+  try {
+    await axiosInstance.post(
+      `${API_PREFIX}/knowledgebases/${kbName}/docs/${movedName}/move`,
+      { parentName, beforeName, afterName }
+    );
+    const tip =
+      position === "top"
+        ? "文档已移动到顶层"
+        : position === "child"
+          ? `文档已移入「${target?.title}」`
+          : position === "before"
+            ? `文档已移动到「${target?.title}」之前`
+            : `文档已移动到「${target?.title}」之后`;
+    Toast.success(tip);
+    // 展开移动后的父级，便于查看结果
+    if (position === "child") {
+      if (target) {
+        expanded.value.add(target.name);
+      }
+    } else if (position !== "top" && target?.parentName) {
+      toggleExpandAllDir(target.parentName);
+    }
+    if (selected.value?.name === movedName && doc.value) {
+      doc.value.spec.parentName = parentName || undefined;
+    }
+    await loadTree();
+  } catch (err) {
+    Toast.error("移动失败，请重试");
+  }
+}
+
+// 展开 parentName 节点及其到根的所有祖先，确保移动后可见
+function toggleExpandAllDir(parentName: string) {
+  const expandPath = (nodes: DocTreeNode[], name: string): boolean => {
+    for (const node of nodes) {
+      if (node.name === name) {
+        return true;
+      }
+      if (expandPath(node.children || [], name)) {
+        expanded.value.add(node.name);
+        return true;
+      }
+    }
+    return false;
+  };
+  expandPath(tree.value, parentName);
+}
+
 function phaseLabel(phase?: string) {
   if (phase === "published") {
     return "已发布";
@@ -354,7 +570,7 @@ function formatDate(time?: string) {
 
 function onMarkdownUpdate(markdown: string) {
   docForm.markdown = markdown;
-  saveStatus.value = "unsaved";
+  
 }
 
 function scrollEditorToTop() {
@@ -412,7 +628,7 @@ async function selectDoc(node: DocTreeNode) {
     docForm.priority = data.spec.priority?.toString() || "";
     moveParent.value = data.spec.parentName || "";
     tags.value = data.spec.tags || [];
-    saveStatus.value = "saved";
+    
     previewMode.value = true;
     // 内容已通过 `:content` prop 绑定并由编辑器内部 watch 注入，
     // 这里不再手动 setContent，避免大文档重复全量渲染
@@ -454,7 +670,7 @@ async function saveDoc() {
       payload
     );
     Toast.success("文档已保存");
-    saveStatus.value = "saved";
+    
     // 乐观更新本地 spec，避免保存后 refreshSelected 触发整篇大文档全量重渲染
     if (doc.value) {
       doc.value.spec = payload.spec;
@@ -695,7 +911,7 @@ async function saveSettings() {
       payload
     );
     Toast.success("文档设置已保存");
-    saveStatus.value = "saved";
+    
     settingsVisible.value = false;
     if (doc.value) {
       doc.value.spec = payload.spec;
@@ -743,10 +959,6 @@ onMounted(async () => {
           </button>
           <div class="sidebar-top-title">
             <h1 class="kb-title">{{ kb?.spec.displayName || "知识库详情" }}</h1>
-            <span class="save-status" :class="saveStatus">
-              <span class="status-dot"></span>
-              {{ saveStatusLabel }}
-            </span>
           </div>
         </div>
 
@@ -754,7 +966,6 @@ onMounted(async () => {
         <div class="sidebar-body">
           <div class="section-header">
             <span class="section-title">文档目录</span>
-            <span class="section-count">{{ kbStats.total }} 篇</span>
             <div class="section-actions">
               <button class="icon-btn" title="新建文档" @click="openCreateDoc">
                 <IconAddCircle class="h-4 w-4" />
@@ -783,7 +994,15 @@ onMounted(async () => {
             </button>
           </div>
 
-          <div class="tree-scroll">
+          <div
+            class="tree-scroll"
+            :class="{
+              'drag-active': dragState.dragging,
+              'drop-top': dragState.dragging && dragState.targetTop,
+            }"
+            @dragover="onListDragOver"
+            @drop="onListDrop"
+          >
             <VLoading v-if="treeLoading" />
             <VEmpty
               v-else-if="!filteredFlattened.length"
@@ -794,10 +1013,33 @@ onMounted(async () => {
               <li v-for="item in filteredFlattened" :key="item.node.name">
                 <div
                   class="tree-node"
-                  :class="{ selected: selected?.name === item.node.name }"
+                  :class="{
+                    selected: selected?.name === item.node.name,
+                    'dragging-source':
+                      dragState.dragging && dragState.fromName === item.node.name,
+                    'drop-target':
+                      dragState.dragging &&
+                      dragState.targetName === item.node.name &&
+                      dragState.position === 'child',
+                    'drop-before':
+                      dragState.dragging &&
+                      dragState.targetName === item.node.name &&
+                      dragState.position === 'before',
+                    'drop-after':
+                      dragState.dragging &&
+                      dragState.targetName === item.node.name &&
+                      dragState.position === 'after',
+                  }"
                   :style="{ paddingLeft: `${8 + item.depth * 16}px` }"
+                  draggable="true"
                   @click="selectDoc(item.node)"
+                  @dragstart="onDragStart($event, item.node)"
+                  @dragend="onDragEnd"
+                  @dragenter="onDragEnter($event, item.node)"
+                  @dragover="onDragOver($event, item.node)"
+                  @drop="onDropOnNode($event, item.node)"
                 >
+                  <span class="drag-grip" aria-hidden="true"></span>
                   <button
                     v-if="hasChildren(item.node)"
                     class="expand-btn"
@@ -808,8 +1050,10 @@ onMounted(async () => {
                   </button>
                   <span v-else class="expand-placeholder"></span>
 
-                  <IconFolder v-if="hasChildren(item.node)" class="node-icon folder" />
-                  <IconPages v-else class="node-icon" />
+                  <span class="node-icon" :class="hasChildren(item.node) ? 'folder' : 'doc'">
+                    <IconFolder v-if="hasChildren(item.node)" />
+                    <IconPages v-else />
+                  </span>
 
                   <span class="node-title">{{ item.node.title }}</span>
 
@@ -1201,30 +1445,6 @@ onMounted(async () => {
   text-overflow: ellipsis;
 }
 
-.save-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3125rem;
-  font-size: 0.6875rem;
-  color: #8c8c8c;
-  white-space: nowrap;
-}
-
-.save-status .status-dot {
-  width: 0.4375rem;
-  height: 0.4375rem;
-  border-radius: 9999px;
-  background: #52c41a;
-}
-
-.save-status.unsaved .status-dot {
-  background: #faad14;
-}
-
-.save-status.unsaved {
-  color: #d48806;
-}
-
 /* 浅灰内容区 */
 .sidebar-body {
   flex: 1 1 auto;
@@ -1245,11 +1465,6 @@ onMounted(async () => {
   font-size: 0.8125rem;
   font-weight: 500;
   color: #595959;
-}
-
-.section-count {
-  font-size: 0.75rem;
-  color: #8c8c8c;
 }
 
 .section-actions {
@@ -1274,8 +1489,8 @@ onMounted(async () => {
 }
 
 .icon-btn:hover {
-  color: #52c41a;
-  background: #f0fdf4;
+  color: #2563eb;
+  background: #eff6ff;
 }
 
 /* 搜索框 */
@@ -1303,8 +1518,8 @@ onMounted(async () => {
 }
 
 .search-box input:focus {
-  border-color: #52c41a;
-  box-shadow: 0 0 0 3px rgba(82, 196, 26, 0.12);
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
 }
 
 .search-icon {
@@ -1365,28 +1580,134 @@ onMounted(async () => {
   padding: 0;
 }
 
+/* 拖拽激活时容器过渡 */
+.tree-scroll {
+  transition: background 0.15s ease;
+}
+
+/* 拖到顶层（空白区域）提示 */
+.tree-scroll.drop-top {
+  background: #fafff6;
+  box-shadow: inset 0 0 0 2px #60a5fa, inset 0 0 0 4px #ffffff;
+  border-radius: 0.5rem;
+}
+
 .tree-node {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 0.375rem;
   height: 2.25rem;
   padding: 0 0.5rem;
-  border-radius: 0.375rem;
+  border-radius: 0.5rem;
   cursor: pointer;
+  transition: background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.tree-node::before {
+  content: "";
+  position: absolute;
+  top: 0.4375rem;
+  bottom: 0.4375rem;
+  left: 0.125rem;
+  width: 0.1875rem;
+  border-radius: 9999px;
+  background: transparent;
   transition: background 0.15s ease;
 }
 
 .tree-node:hover {
   background: #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
 .tree-node.selected {
-  background: #f6ffed;
+  background: #eff6ff;
+  box-shadow: inset 0 0 0 1px #bfdbfe;
+}
+
+.tree-node.selected::before {
+  background: #2563eb;
 }
 
 .tree-node.selected .node-title {
-  color: #389e0d;
+  color: #1d4ed8;
   font-weight: 500;
+}
+
+/* 拖动手柄：网格小圆点 */
+.drag-grip {
+  flex-shrink: 0;
+  width: 0.625rem;
+  height: 1rem;
+  opacity: 0;
+  cursor: grab;
+  background-image: radial-gradient(#c0c4cc 1.1px, transparent 1.2px);
+  background-size: 0.3125rem 0.5rem;
+  background-position: 0 0.0625rem;
+  transition: opacity 0.15s ease;
+  border-radius: 0.25rem;
+}
+
+.tree-node:hover .drag-grip,
+.tree-node.dragging-source .drag-grip {
+  opacity: 1;
+}
+
+.drag-grip:hover {
+  background-color: #eff6ff;
+}
+
+/* 被拖拽的源节点 */
+.tree-node.dragging-source {
+  opacity: 0.45;
+  background: #eff6ff;
+  cursor: grabbing;
+}
+
+/* 有效放置目标（作为其子级） */
+.tree-node.drop-target {
+  background: #eff6ff;
+  box-shadow: inset 0 0 0 1.5px #60a5fa;
+}
+
+.tree-node.drop-target::before {
+  background: #2563eb;
+}
+
+.tree-node.drop-target .node-title {
+  color: #1d4ed8;
+  font-weight: 500;
+}
+
+.tree-node.drop-target .drag-grip {
+  opacity: 1;
+}
+
+/* 同级排序：在目标上方 / 下方显示插入横线 */
+.tree-node.drop-before::after,
+.tree-node.drop-after::after {
+  content: "";
+  position: absolute;
+  left: 0.375rem;
+  right: 0.375rem;
+  height: 0.1875rem;
+  border-radius: 9999px;
+  background: #2563eb;
+  box-shadow: 0 0 0 1px #ffffff;
+}
+
+.tree-node.drop-before::after {
+  top: 0;
+}
+
+.tree-node.drop-after::after {
+  bottom: 0;
+}
+
+.tree-node.drop-before,
+.tree-node.drop-after {
+  background: #eff6ff;
 }
 
 .expand-btn {
@@ -1415,14 +1736,28 @@ onMounted(async () => {
 }
 
 .node-icon {
-  width: 1rem;
-  height: 1rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.375rem;
+  height: 1.375rem;
   flex-shrink: 0;
-  color: #8c8c8c;
+  border-radius: 0.375rem;
+}
+
+.node-icon svg {
+  width: 0.875rem;
+  height: 0.875rem;
 }
 
 .node-icon.folder {
-  color: #52c41a;
+  color: #1d4ed8;
+  background: #dbeafe;
+}
+
+.node-icon.doc {
+  color: #409eff;
+  background: #ecf5ff;
 }
 
 .node-title {
@@ -1444,7 +1779,7 @@ onMounted(async () => {
 }
 
 .node-status-dot.published {
-  background: #52c41a;
+  background: #2563eb;
 }
 
 .node-actions {
@@ -1473,13 +1808,13 @@ onMounted(async () => {
 }
 
 .action-btn:hover {
-  color: #52c41a;
-  background: #f6ffed;
+  color: #2563eb;
+  background: #eff6ff;
 }
 
 .action-btn.danger:hover {
-  color: #ff4d4f;
-  background: #fff1f0;
+  color: #ffffff;
+  background: #ff4d4f;
 }
 
 /* 知识库信息 */
@@ -1501,7 +1836,7 @@ onMounted(async () => {
 }
 
 .kb-info-header :deep(svg) {
-  color: #52c41a;
+  color: #2563eb;
 }
 
 .kb-info-item {
@@ -1626,9 +1961,9 @@ onMounted(async () => {
 }
 
 .status-btn:hover {
-  color: #389e0d;
-  background: #f6ffed;
-  border-color: #d9f7be;
+  color: #1d4ed8;
+  background: #eff6ff;
+  border-color: #bfdbfe;
 }
 
 .view-toggle {
@@ -1658,7 +1993,7 @@ onMounted(async () => {
 }
 
 .view-toggle button.active {
-  color: #389e0d;
+  color: #1d4ed8;
   background: #ffffff;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
 }
@@ -1759,8 +2094,8 @@ onMounted(async () => {
 }
 
 .form-field input:focus {
-  border-color: #52c41a;
-  box-shadow: 0 0 0 3px rgba(82, 196, 26, 0.12);
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
 }
 
 .help-text {
@@ -1784,8 +2119,8 @@ onMounted(async () => {
 }
 
 .tag-input:focus-within {
-  border-color: #52c41a;
-  box-shadow: 0 0 0 3px rgba(82, 196, 26, 0.12);
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
 }
 
 .tag-input input {
@@ -1839,8 +2174,8 @@ onMounted(async () => {
   align-items: flex-start;
   gap: 0.5rem;
   padding: 0.75rem;
-  background: #f6ffed;
-  border: 1px solid #d9f7be;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
   border-radius: 0.5rem;
 }
 
@@ -1848,14 +2183,14 @@ onMounted(async () => {
   flex-shrink: 0;
   width: 1rem;
   height: 1rem;
-  color: #52c41a;
+  color: #2563eb;
   margin-top: 0.125rem;
 }
 
 .tip-card p {
   font-size: 0.75rem;
   line-height: 1.5;
-  color: #389e0d;
+  color: #1d4ed8;
   margin: 0;
 }
 
@@ -1890,11 +2225,11 @@ onMounted(async () => {
 }
 
 .move-option.selected {
-  background: #f6ffed;
+  background: #eff6ff;
 }
 
 .move-option input[type="radio"] {
-  accent-color: #52c41a;
+  accent-color: #2563eb;
   margin: 0;
   flex-shrink: 0;
 }
@@ -1907,7 +2242,7 @@ onMounted(async () => {
 }
 
 .move-option.selected .move-option-icon {
-  color: #52c41a;
+  color: #2563eb;
 }
 
 .move-option span {
@@ -1919,7 +2254,7 @@ onMounted(async () => {
 }
 
 .move-option.selected span {
-  color: #389e0d;
+  color: #1d4ed8;
   font-weight: 500;
 }
 
@@ -1985,20 +2320,20 @@ onMounted(async () => {
 }
 
 :deep(.btn-danger) {
-  color: #ff4d4f;
-  border: 1px solid #ffccc7;
-  background: #ffffff;
+  color: #ffffff;
+  border: 1px solid #ff4d4f;
+  background: #ff4d4f;
 }
 
 :deep(.btn-danger:hover) {
-  background: #fff1f0;
-  border-color: #ffa39e;
-  color: #f5222d;
-  box-shadow: 0 2px 8px rgba(255, 77, 79, 0.18);
+  background: #f5222d;
+  border-color: #f5222d;
+  color: #ffffff;
+  box-shadow: 0 2px 10px rgba(255, 77, 79, 0.32);
 }
 
 :deep(.btn-danger .btn-icon) {
-  color: #ff4d4f;
+  color: #ffffff;
 }
 
 :deep(.btn-secondary) {

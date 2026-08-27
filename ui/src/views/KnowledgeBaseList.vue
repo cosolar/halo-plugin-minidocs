@@ -748,7 +748,7 @@ onMounted(() => {
                 :title="'创建于 ' + formatTime(kb.metadata.creationTimestamp)"
               >
                 创建于
-                {{ formatTime(kb.metadata.creationTimestamp, 'MM-dd HH:mm') }}
+                {{ formatTime(kb.metadata.creationTimestamp, 'MM/DD HH:mm') }}
               </span>
             </div>
             <div class="kb-list-actions">
@@ -1490,6 +1490,7 @@ onMounted(() => {
 }
 
 .kb-card-list {
+  width: 100%;
   border: 1px solid #e5e7eb;
   border-radius: 10px;
   transition: all 0.2s ease;
@@ -1505,12 +1506,13 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 0.75rem;
+  width: 100%;
   padding: 0.875rem 1rem;
 }
 
 .kb-list-info {
   min-width: 0;
-  flex: 1;
+  flex: 1 1 auto;
 }
 
 .kb-list-title-row {
@@ -1565,7 +1567,7 @@ onMounted(() => {
 }
 
 @media (min-width: 1025px) {
-  .kb-list-meta {
+  .kb-list-actions {
     margin-left: auto;
   }
 }

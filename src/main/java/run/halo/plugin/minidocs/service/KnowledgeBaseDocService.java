@@ -7,6 +7,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import lombok.Builder;
@@ -170,22 +171,90 @@ public class KnowledgeBaseDocService {
 
     /**
      * 移动文档：修改 parentName 与 priority，并阻止移动到自身或其子文档下。
+     *
+     * <p>当仅传 parentName / priority 时保持原有行为（简单移动）；当传 beforeName 或
+     * afterName 时，在目标节点的同级中执行排序（插入到其之前或之后），并重排同组兄弟节点的
+     * priority 为连续整数，保证顺序与显示一致。
      */
-    public Mono<Void> move(String kbName, String docName, String parentName, Integer priority) {
+    public Mono<Void> move(String kbName, String docName, String parentName, Integer priority,
+        String beforeName, String afterName) {
         return get(kbName, docName)
-            .flatMap(doc -> wouldCreateCycle(docName, parentName)
+            .flatMap(moved -> wouldCreateCycle(docName, parentName)
                 .flatMap(cycle -> {
                     if (cycle) {
                         return Mono.error(new ResponseStatusException(HttpStatus.BAD_REQUEST,
                             "不能移动到自身或其子文档下"));
                     }
-                    doc.getSpec().setParentName(
-                        StringUtils.hasText(parentName) ? parentName : null);
-                    if (priority != null) {
-                        doc.getSpec().setPriority(priority);
+                    String parent = StringUtils.hasText(parentName) ? parentName : null;
+                    moved.getSpec().setParentName(parent);
+                    // 同级排序：插入到目标之前/之后，并重排兄弟节点
+                    if (StringUtils.hasText(beforeName) || StringUtils.hasText(afterName)) {
+                        return reorderSiblings(kbName, parent, beforeName, afterName, docName,
+                            moved)
+                            .then(client.update(moved).then());
                     }
-                    return client.update(doc).then();
+                    if (priority != null) {
+                        moved.getSpec().setPriority(priority);
+                    }
+                    return client.update(moved).then();
                 }));
+    }
+
+    /**
+     * 将 moved 节点插入到目标节点（target = beforeName 或 afterName）之前/之后，
+     * 并把目标父级下的整组兄弟节点 priority 重排为 0..n-1。
+     */
+    private Mono<Void> reorderSiblings(String kbName, String parentName, String beforeName,
+        String afterName, String docName, KnowledgeBaseDoc moved) {
+        String targetName = StringUtils.hasText(beforeName) ? beforeName : afterName;
+        boolean isAfter = !StringUtils.hasText(beforeName);
+        String parent = StringUtils.hasText(parentName) ? parentName : null;
+        return client.listAll(KnowledgeBaseDoc.class,
+                ListOptions.builder()
+                    .fieldQuery(equal("spec.knowledgeBaseName", kbName))
+                    .build(),
+                Sort.by(Order.asc("spec.priority"), Order.asc("metadata.name")))
+            .collectList()
+            .flatMap(all -> {
+                List<KnowledgeBaseDoc> docs = all.stream()
+                    .filter(d -> Objects.equals(d.getSpec().getParentName(), parent))
+                    .collect(Collectors.toCollection(ArrayList::new));
+                docs.removeIf(d -> d.getMetadata().getName().equals(docName));
+                int idx;
+                if (!StringUtils.hasText(targetName)) {
+                    idx = isAfter ? docs.size() : 0;
+                } else {
+                    idx = indexOfDoc(docs, targetName);
+                    if (idx < 0) {
+                        idx = isAfter ? docs.size() : 0;
+                    } else if (isAfter) {
+                        idx += 1;
+                    }
+                }
+                docs.add(idx, moved);
+                Mono<Void> chain = Mono.empty();
+                for (int i = 0; i < docs.size(); i++) {
+                    KnowledgeBaseDoc d = docs.get(i);
+                    if (d.getMetadata().getName().equals(docName)) {
+                        moved.getSpec().setPriority(i);
+                        continue;
+                    }
+                    if (!Objects.equals(d.getSpec().getPriority(), i)) {
+                        d.getSpec().setPriority(i);
+                        chain = chain.then(client.update(d).then());
+                    }
+                }
+                return chain;
+            });
+    }
+
+    private int indexOfDoc(List<KnowledgeBaseDoc> docs, String name) {
+        for (int i = 0; i < docs.size(); i++) {
+            if (docs.get(i).getMetadata().getName().equals(name)) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     /**

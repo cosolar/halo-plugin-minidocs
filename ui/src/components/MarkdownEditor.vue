@@ -12,6 +12,87 @@ import "cherry-markdown/dist/cherry-markdown.css";
 // 需显式传入 katex 并引入其样式，否则公式块退化为纯文本。
 import katex from "katex";
 import "katex/dist/katex.min.css";
+// 代码块语法高亮：cherry 默认用 prism 渲染，但 0.11.10 打包时只内联了少量基础语言，
+// java/shell/python/sql 等没打进包，导致这些语言全部回退成 javascript（无正确着色）。
+// 这里通过 cherry 官方的 engine.syntax.codeBlock.highlighter 注入完整 prismjs（含常用语言扩展），
+// 输出仍是 cherry 主题所用的 .token-* 类，故内置代码主题（含所选主题）照常着色。
+// 注意：vite 对 prism 语言组件（UMD 副作用脚本）的静态打包不可靠——会把核心拆成多份不完整实例、
+// 并因 php 等依赖 markup-templating 把全局 Prism 污染成缺 tokenizePlaceholders 的副本，
+// 导致 Prism.highlight 运行时抛错。故改为运行时统一动态加载到同一个全局 Prism，
+// 并且高亮一律使用模块内自己加载的这份完整实例（不信任页面预设的 window.Prism，
+// 那可能是 cherry 内置或其它脚本留下、并未注册 java 等语言的残缺实例）。
+let loadedPrism: any = null;
+// 语言组件按「依赖波次」分组：同波内互不依赖可并行加载；后波依赖前波
+// （typescript→javascript、cpp→c、scala→java、java→clike、markdown→markup、php→markup-templating）。
+// 单个组件加载失败只影响该语言（其余语言照常高亮），不再让整个 prism 不可用。
+// 注意：import 的参数必须是字符串字面量（不能是数组遍历的变量），
+// 否则 vite/rollup 无法静态分析——组件不会被打成 chunk，运行时浏览器也解析不了
+// node_modules 裸路径。故这里把每个组件包成 () => import("字面量") 的 loader。
+const PRISM_LANG_WAVES: Array<Array<() => Promise<any>>> = [
+  [
+    () => import("prismjs/components/prism-clike.js"),
+    () => import("prismjs/components/prism-markup.js"),
+    () => import("prismjs/components/prism-markup-templating.js"),
+    () => import("prismjs/components/prism-css.js"),
+    () => import("prismjs/components/prism-python.js"),
+    () => import("prismjs/components/prism-bash.js"),
+    () => import("prismjs/components/prism-shell-session.js"),
+    () => import("prismjs/components/prism-sql.js"),
+    () => import("prismjs/components/prism-json.js"),
+    () => import("prismjs/components/prism-yaml.js"),
+    () => import("prismjs/components/prism-go.js"),
+    () => import("prismjs/components/prism-rust.js"),
+    () => import("prismjs/components/prism-csharp.js"),
+    () => import("prismjs/components/prism-docker.js"),
+    () => import("prismjs/components/prism-powershell.js"),
+    () => import("prismjs/components/prism-diff.js"),
+    () => import("prismjs/components/prism-ini.js"),
+    () => import("prismjs/components/prism-toml.js"),
+    () => import("prismjs/components/prism-http.js"),
+  ],
+  [
+    () => import("prismjs/components/prism-javascript.js"),
+    () => import("prismjs/components/prism-java.js"),
+    () => import("prismjs/components/prism-c.js"),
+    () => import("prismjs/components/prism-ruby.js"),
+    () => import("prismjs/components/prism-swift.js"),
+    () => import("prismjs/components/prism-kotlin.js"),
+    () => import("prismjs/components/prism-groovy.js"),
+    () => import("prismjs/components/prism-markdown.js"),
+    () => import("prismjs/components/prism-php.js"),
+  ],
+  [
+    () => import("prismjs/components/prism-typescript.js"),
+    () => import("prismjs/components/prism-cpp.js"),
+    () => import("prismjs/components/prism-scala.js"),
+  ],
+];
+async function ensurePrismLoaded(): Promise<any> {
+  if (loadedPrism) {
+    return loadedPrism;
+  }
+  const mod = await import("prismjs");
+  const prism = mod.default ?? mod;
+  // 强制覆盖全局：语言组件 (function(Prism){}(Prism)) 会注册到这份完整实例上
+  (window as unknown as Record<string, any>).Prism = prism;
+  // 核心就绪即对外可用：后续即使个别语言组件加载失败，基础语言仍能高亮
+  loadedPrism = prism;
+  for (const wave of PRISM_LANG_WAVES) {
+    await Promise.all(
+      wave.map((loader) =>
+        loader().catch((e) => {
+          console.warn("prism 语言组件加载失败，该语言将按纯文本渲染", e);
+        })
+      )
+    );
+  }
+  return prism;
+}
+
+/** 返回模块内自己加载并已注册完整语言的 Prism 实例 */
+function getPrism(): any {
+  return loadedPrism;
+}
 // Halo 附件上传：使用控制台 API 上传到默认存储策略，返回 Attachment 的公开访问地址
 import { consoleApiClient } from "@halo-dev/api-client";
 
@@ -59,6 +140,92 @@ async function ensureMermaidPluginRegistered() {
 }
 
 const cherryReadyPromise = ensureMermaidPluginRegistered();
+
+// 代码块高亮主题：从插件设置读取，模块级缓存避免每次挂载重复请求
+let codeBlockTheme = "default";
+let codeBlockThemeLoaded = false;
+async function loadCodeBlockTheme() {
+  if (codeBlockThemeLoaded) {
+    return;
+  }
+  codeBlockThemeLoaded = true;
+  try {
+    const { data } = await consoleApiClient.plugin.plugin.fetchPluginJsonConfig({
+      name: "halo-plugin-minidocs",
+    });
+    // 插件配置按设置分组返回（如 { basic: { siteName, codeBlockTheme, ... } }）
+    const cfg = data as Record<string, any>;
+    const theme =
+      cfg?.basic?.codeBlockTheme ?? (cfg as any)?.codeBlockTheme;
+    if (typeof theme === "string" && theme.trim()) {
+      codeBlockTheme = theme.trim();
+    }
+  } catch (e) {
+    console.error("读取插件配置失败，使用默认代码块主题", e);
+  }
+}
+
+// 代码块自定义高亮：cherry 的 engine.syntax.codeBlock.highlighter 会用本函数替换内置
+// （语言不全的）prism 渲染每个代码块（运行时签名：codeHighlight(code, lang)）。这里改用
+// 完整 prismjs 输出 .token-* 类，与 cherry 内置 prism 主题配色完全一致。
+// 未声明语言或语法不存在时转义成纯文本，避免沿用错的语言语法导致异常着色。
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+// 常见语言别名 → prism 实际注册名（cherry 会把 lang 转成小写再传入）；
+// 未列出的别名（js/py/ts/sh 等）由 prism 自身在 languages 上注册的别名兜底解析
+const LANG_ALIAS: Record<string, string> = {
+  shell: "bash",
+  sh: "bash",
+  js: "javascript",
+  py: "python",
+  "c++": "cpp",
+  cxx: "cpp",
+  "cs": "csharp",
+  md: "markdown",
+  yml: "yaml",
+  html: "markup",
+  htm: "markup",
+  xml: "markup",
+  svg: "markup",
+  vue: "markup",
+  ts: "typescript",
+  docker: "docker",
+  dockerfile: "docker",
+  ps: "powershell",
+  ps1: "powershell",
+  powershell: "powershell",
+};
+
+function resolveGrammar(prism: any, lang: string) {
+  const name = LANG_ALIAS[lang] || lang;
+  // LANG_ALIAS 优先；再回退 prism 自身注册的别名（如 languages.js / languages.py / languages.ts）
+  return prism.languages[name] || prism.languages[lang];
+}
+
+function codeHighlight(code: string, lang: string): string {
+  try {
+    const prism = getPrism();
+    if (!prism) {
+      return escapeHtml(code);
+    }
+    const grammar = resolveGrammar(prism, lang);
+    if (!grammar) {
+      return escapeHtml(code);
+    }
+    // highlight 的第三个参数仅用于报错信息，取映射名或原名均可
+    const name = LANG_ALIAS[lang] || lang;
+    return prism.highlight(code, grammar, name);
+  } catch (e) {
+    console.warn(`代码高亮失败（${lang}），按纯文本渲染`, e);
+    return escapeHtml(code);
+  }
+}
 
 // 通过 Halo 控制台附件接口上传到默认存储策略，返回附件公开访问地址（permalink）
 async function uploadFileToHalo(file: File): Promise<string> {
@@ -164,6 +331,15 @@ onMounted(async () => {
     return;
   }
   await cherryReadyPromise;
+  // 先加载完整 prism 并统一注册到 window.Prism，再初始化 cherry；
+  // 若 prism 加载失败不致崩溃，仅代码块不高亮
+  try {
+    await ensurePrismLoaded();
+  } catch (e) {
+    console.error("prism 加载失败，代码块将不进行语法高亮", e);
+  }
+  // 读取插件设置中的代码块主题（失败时回退 default）
+  await loadCodeBlockTheme();
   // 等待期间组件可能已被卸载，避免在已销毁的挂载点上初始化
   if (!hostRef.value.isConnected) {
     return;
@@ -190,6 +366,11 @@ onMounted(async () => {
       className: "minidocs-preview-theme",
     },
     engine: {
+      global: {
+        // 空行渲染：classicBr=true 时按标准 markdown 处理，连续换行只分割段落，
+        // 不再把多余空行渲染成可见的空段落 <p data-type="br">&nbsp;</p>
+        classicBr: true,
+      },
       syntax: {
         codeBlock: {
           // 每个 mermaid 图块顶部显示「预览 / 源码」切换
@@ -198,7 +379,9 @@ onMounted(async () => {
           editCode: false,      // 是否显示编辑按钮
           expandCode: false, // 是否展开/收起代码块，当代码块行数大于10行时，会自动收起代码块
           lineNumber: false, // 默认显示行号
-        },
+          // 自定义高亮：注入内置约 40 种语言，替换 cherry 受限内联版本
+          highlighter: codeHighlight,
+        } as any,
         // 公式引擎：块级 $$...$$ 与行内 $...$ 均用 KaTeX 渲染（默认 MathJax 需额外加载脚本）
         mathBlock: { engine: "katex", selfClosing: false },
         inlineMath: { engine: "katex" },
@@ -266,6 +449,8 @@ onMounted(async () => {
       },
     },
   });
+  // 应用插件设置中选择的代码块高亮主题
+  cherry.setCodeBlockTheme(codeBlockTheme);
   // 初始视图为只读预览时，直接切到 previewOnly
   if (props.model === "preview") {
     cherry.switchModel("previewOnly");
@@ -375,6 +560,11 @@ defineExpose({
   overflow: auto;
 }
 
+/* 空行标记兜底：无论 classicBr 配置（或 localStorage 残留）如何，空行元素一律不显示 */
+.markdown-editor-wrapper :deep([data-type="br"]) {
+  display: none;
+}
+
 /* ============ 预览区自定义主题（previewer.className=minidocs-preview-theme） ============
  * 重要：cherry 的 createPreviewer 把 className 与 cherry-markdown 加在【同一个】预览容器
  * 元素上（类名数组 ["cherry-previewer cherry-markdown", className, ...]），并非父子嵌套，
@@ -399,7 +589,7 @@ defineExpose({
   h4,
   h5,
   h6 {
-    margin: 1.6em 0 0.8em;
+    margin: 1.0em 0 0.8em;
     font-weight: 600;
     line-height: 1.4;
     color: #1f2d3d;
@@ -477,21 +667,10 @@ defineExpose({
   }
 
   /* ---- 代码块 ---- */
-  pre {
-    margin: 1em 0;
-    padding: 14px 16px;
-    border: 1px solid #e5e9f0;
+  /* 仅保持代码块边框圆角，其余（底色/内边距/语法配色）使用 cherry 内置默认主题 */
+  div[data-type="codeBlock"] {
     border-radius: 8px;
-    background: #f7f9fc;
-    overflow-x: auto;
-    line-height: 1.6;
-  }
-  pre code {
-    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo,
-      monospace;
-    font-size: 13px;
-    color: #34495e;
-    background: transparent;
+    overflow: hidden;
   }
 
   /* ---- 引用 ---- */
@@ -606,6 +785,40 @@ defineExpose({
     margin: 1em 0;
   }
 }
+
+/* ============ 深色代码主题背景修复 ============
+ * cherry 的深色代码主题通过 `pre[class*=language-]` 设置代码块背景色，但实际渲染时语言类
+ * 挂在 <code> 上、<pre> 上并没有 language-* 类，导致 `pre[class*=language-]` 选择器永远
+ * 匹配不到，深色背景始终不绘制（切换主题只有文字变色、底色仍为浅色）。这里按
+ * data-code-block-theme 属性直接给 <pre> 施加对应主题的背景色，保证主题切换真正生效。
+ */
+/*.markdown-editor-wrapper :deep(.minidocs-preview-theme[data-code-block-theme="vs-dark"] div[data-type="codeBlock"] pre) {
+  background: #1e1e1e;
+}
+.markdown-editor-wrapper :deep(.minidocs-preview-theme[data-code-block-theme="one-dark"] div[data-type="codeBlock"] pre) {
+  background: #282c34;
+}
+.markdown-editor-wrapper :deep(.minidocs-preview-theme[data-code-block-theme="dark"] div[data-type="codeBlock"] pre) {
+  background: #272822;
+}
+.markdown-editor-wrapper :deep(.minidocs-preview-theme[data-code-block-theme="okaidia"] div[data-type="codeBlock"] pre) {
+  background: #272822;
+}
+.markdown-editor-wrapper :deep(.minidocs-preview-theme[data-code-block-theme="twilight"] div[data-type="codeBlock"] pre) {
+  background: #141414;
+}
+.markdown-editor-wrapper :deep(.minidocs-preview-theme[data-code-block-theme="funky"] div[data-type="codeBlock"] pre) {
+  background: #1f1f1f;
+}
+!* 深色主题下代码文字用浅色，保证可读 *!
+.markdown-editor-wrapper :deep(.minidocs-preview-theme[data-code-block-theme="vs-dark"] div[data-type="codeBlock"] pre code),
+.markdown-editor-wrapper :deep(.minidocs-preview-theme[data-code-block-theme="one-dark"] div[data-type="codeBlock"] pre code),
+.markdown-editor-wrapper :deep(.minidocs-preview-theme[data-code-block-theme="dark"] div[data-type="codeBlock"] pre code),
+.markdown-editor-wrapper :deep(.minidocs-preview-theme[data-code-block-theme="okaidia"] div[data-type="codeBlock"] pre code),
+.markdown-editor-wrapper :deep(.minidocs-preview-theme[data-code-block-theme="twilight"] div[data-type="codeBlock"] pre code),
+.markdown-editor-wrapper :deep(.minidocs-preview-theme[data-code-block-theme="funky"] div[data-type="codeBlock"] pre code) {
+  background: transparent;
+}*/
 
 /* ============ TOC 悬浮目录美化（cherry 挂载到 wrapper 上，独立于预览区） ============
  * 美化仅作用于完整模式（cherry-flex-toc__full）；折叠小圆点模式（__pure）保持 cherry

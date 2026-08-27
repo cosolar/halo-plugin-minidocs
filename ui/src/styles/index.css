@@ -1,4 +1,100 @@
-/* 主题主色覆盖 */
+/* 主题主色覆盖（主题蓝） */
 :root {
-  --colors-primary: 24 24 27 !important;
+  --colors-primary: 37 99 235 !important;
+  --colors-primary-foreground: 255 255 255 !important;
+}
+
+/* 隐藏 cherry-markdown 渲染标题时的锚点链接图标 */
+.cherry-markdown a.anchor {
+  display: none !important;
+}
+
+/*
+ * 代码块高亮兜底配色：
+ * cherry 官方代码块使用 Prism 输出 .token-* 类，并由根节点 data-codeBlockTheme 控制配色；
+ * 但页面若被外部 highlight.js 脚本覆盖（hljs.highlightAll），会把代码块重写成 .hljs-* 类，
+ * 而 cherry 主题只给 .token-* 上色，导致代码块纯白。这里按 github-light 风格给 .hljs-* 补色，
+ * 同时限定在 cherry 预览容器内，避免影响全局。
+ */
+.minidocs-preview-theme .hljs {
+  background: transparent;
+  color: #24292f;
+}
+
+.minidocs-preview-theme .hljs-comment,
+.minidocs-preview-theme .hljs-quote {
+  color: #6e7781;
+  font-style: italic;
+}
+
+.minidocs-preview-theme .hljs-keyword,
+.minidocs-preview-theme .hljs-selector-tag,
+.minidocs-preview-theme .hljs-doctag,
+.minidocs-preview-theme .hljs-template-tag {
+  color: #cf222e;
+}
+
+.minidocs-preview-theme .hljs-string,
+.minidocs-preview-theme .hljs-regexp,
+.minidocs-preview-theme .hljs-addition,
+.minidocs-preview-theme .hljs-attribute {
+  color: #0a3069;
+}
+
+.minidocs-preview-theme .hljs-number,
+.minidocs-preview-theme .hljs-literal,
+.minidocs-preview-theme .hljs-symbol,
+.minidocs-preview-theme .hljs-bullet,
+.minidocs-preview-theme .hljs-variable,
+.minidocs-preview-theme .hljs-template-variable {
+  color: #953800;
+}
+
+.minidocs-preview-theme .hljs-title,
+.minidocs-preview-theme .hljs-title.class_,
+.minidocs-preview-theme .hljs-title.function_,
+.minidocs-preview-theme .hljs-section,
+.minidocs-preview-theme .hljs-meta {
+  color: #8250df;
+}
+
+.minidocs-preview-theme .hljs-type,
+.minidocs-preview-theme .hljs-title.class_,
+.minidocs-preview-theme .hljs-built_in {
+  color: #0550ae;
+}
+
+.minidocs-preview-theme .hljs-params,
+.minidocs-preview-theme .hljs-punctuation,
+.minidocs-preview-theme .hljs-operator {
+  color: #24292f;
+}
+
+.minidocs-preview-theme .hljs-function,
+.minidocs-preview-theme .hljs-title.function_ {
+  color: #8250df;
+}
+
+.minidocs-preview-theme .hljs-attr,
+.minidocs-preview-theme .hljs-selector-attr,
+.minidocs-preview-theme .hljs-selector-pseudo {
+  color: #116329;
+}
+
+.minidocs-preview-theme .hljs-name,
+.minidocs-preview-theme .hljs-tag {
+  color: #116329;
+}
+
+.minidocs-preview-theme .hljs-deletion {
+  color: #82071e;
+  background: #ffebe9;
+}
+
+.minidocs-preview-theme .hljs-emphasis {
+  font-style: italic;
+}
+
+.minidocs-preview-theme .hljs-strong {
+  font-weight: 600;
 }

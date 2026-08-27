@@ -8,11 +8,8 @@ import io.swagger.v3.oas.annotations.media.Schema;
  * @author Cosolar
  */
 public record BasicSetting(
-    @Schema(description = "站点名称") String siteName,
-    @Schema(description = "站点描述") String description,
     @Schema(description = "允许未登录用户阅读公开知识库") Boolean allowAnonymousRead,
-    @Schema(description = "允许导出文档（Markdown）") Boolean allowDocExport,
-    @Schema(description = "预览阅读宽度（px）") Integer previewWidth) {
+    @Schema(description = "允许导出文档（Markdown）") Boolean allowDocExport) {
 
     public boolean anonymousReadEnabled() {
         return allowAnonymousRead == null || allowAnonymousRead;
@@ -20,9 +17,5 @@ public record BasicSetting(
 
     public boolean docExportEnabled() {
         return allowDocExport == null || allowDocExport;
-    }
-
-    public int previewWidthOrDefault() {
-        return previewWidth == null || previewWidth <= 0 ? 960 : previewWidth;
     }
 }
