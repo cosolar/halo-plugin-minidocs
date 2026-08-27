@@ -375,7 +375,7 @@ onMounted(async () => {
         codeBlock: {
           // 每个 mermaid 图块顶部显示「预览 / 源码」切换
           mermaid: { showSourceToolbar: true },
-          changeLang: false,    // 是否显示语言切换
+          changeLang: false,    // 关闭 hover 语言切换工具条；改用右上角常驻语言标签（见样式）
           editCode: false,      // 是否显示编辑按钮
           expandCode: false, // 是否展开/收起代码块，当代码块行数大于10行时，会自动收起代码块
           lineNumber: false, // 默认显示行号
@@ -671,6 +671,27 @@ defineExpose({
   div[data-type="codeBlock"] {
     border-radius: 8px;
     overflow: hidden;
+  }
+
+  /* 代码块右上角常驻语言标签：读取 cherry 写入的 data-lang 属性展示。
+     用 ::before 伪元素避免改动代码块 DOM 结构，absolute 相对容器(已 position:relative)顶右定位。
+     仅在 data-lang 有值时显示，未标注语言/空则不渲染，避免出现空胶囊。 */
+  div[data-type="codeBlock"][data-lang]:not([data-lang=""])::before {
+    content: attr(data-lang);
+    position: absolute;
+    top: 8px;
+    right: 10px;
+    z-index: 2;
+    padding: 1px 9px;
+    border-radius: 5px;
+    background: rgba(76, 141, 255, 0.12);
+    color: #3b6fd8;
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 12px;
+    line-height: 1.7;
+    pointer-events: none; /* 不拦截代码块内鼠标选择/滚动 */
+    user-select: none;
+    letter-spacing: 0.02em;
   }
 
   /* ---- 引用 ---- */
