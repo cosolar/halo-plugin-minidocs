@@ -5,6 +5,7 @@ import java.time.Instant;
 import java.util.List;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
+import lombok.ToString;
 import run.halo.app.extension.AbstractExtension;
 import run.halo.app.extension.GVK;
 
@@ -44,9 +45,26 @@ public class KnowledgeBaseDoc extends AbstractExtension {
         @Schema(description = "文档别名，用于生成可读 URL", maxLength = 200)
         private String slug;
 
+        @Schema(description = "作者（创建人用户名）")
+        private String author;
+
+        @Schema(description = "创建时间（创建时由系统自动写入）")
+        private Instant creationTime;
+
+        @Schema(description = "封面图片地址")
+        private String cover;
+
+        @Schema(description = "摘要")
+        private String summary;
+
+        @Schema(description = "最后一次更新时间")
+        private Instant updateTime;
+
+        @ToString.Exclude
         @Schema(description = "文档内容（Markdown）")
         private String content;
 
+        @ToString.Exclude
         @Schema(description = "文档内容（服务端渲染后的 HTML，供主题端直接输出）")
         private String contentHtml;
 
@@ -59,7 +77,7 @@ public class KnowledgeBaseDoc extends AbstractExtension {
         @Schema(description = "标签列表")
         private List<String> tags;
 
-        @Schema(description = "文档状态：draft / published / archived",
+        @Schema(description = "文档状态：draft(草稿) / published(已发布)",
             defaultValue = "draft")
         private String phase = "draft";
 

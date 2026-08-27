@@ -27,7 +27,7 @@ import {
   IconClose,
   IconUpload,
 } from "@halo-dev/components";
-import { axiosInstance } from "@halo-dev/api-client";
+import { axiosInstance, consoleApiClient } from "@halo-dev/api-client";
 import { utils } from "@halo-dev/ui-shared";
 import UserSelect from "../components/UserSelect.vue";
 import TagInput from "../components/TagInput.vue";
@@ -53,10 +53,13 @@ interface KnowledgeBase {
     displayName: string;
     description?: string;
     logo?: string;
+    cover?: string;
     tags?: string[];
     publicVisible?: boolean;
     members?: string[];
     priority?: number;
+    creationTime?: string;
+    updateTime?: string;
   };
   status?: {
     docCount?: number;
@@ -78,7 +81,7 @@ const size = ref(10);
 const keyword = ref("");
 const publicVisible = ref<boolean | undefined>(undefined);
 const viewMode = ref<"grid" | "list">("grid");
-const sortBy = ref<"updateTime" | "createTime" | "name" | "docCount">("updateTime");
+const sortBy = ref<"updateTime" | "createTime" | "name" | "docCount" | "priority">("updateTime");
 const stats = ref<Stats | null>(null);
 const statsLoading = ref(false);
 
@@ -90,10 +93,175 @@ const form = reactive({
   displayName: "",
   description: "",
   logo: "",
+  cover: "",
+  priority: 10,
   tags: [] as string[],
   members: [] as string[],
   publicVisible: false,
 });
+
+// 知识库封面上传
+const kbCoverInput = ref<HTMLInputElement | null>(null);
+function triggerKbCover() {
+  kbCoverInput.value?.click();
+}
+async function onKbCoverChange(e: Event) {
+  const input = e.target as HTMLInputElement;
+  const file = input.files?.[0];
+  if (!file) {
+    return;
+  }
+  try {
+    const { data } =
+      await consoleApiClient.storage.attachment.uploadAttachmentForConsole({
+        file,
+      });
+    const url = data.status?.permalink;
+    if (url) {
+      form.cover = url;
+      Toast.success("封面已上传");
+    } else {
+      Toast.error("上传成功但未获取到图片地址");
+    }
+  } catch {
+    Toast.error("封面上传失败，请重试");
+  } finally {
+    input.value = "";
+  }
+}
+
+// 知识库导出
+const exporting = ref(false);
+async function exportSelected() {
+  if (!selectedNames.value.length) {
+    Toast.warning("请先勾选要导出的知识库");
+    return;
+  }
+  await doExport(selectedNames.value);
+}
+async function exportOne(kb: KnowledgeBase) {
+  await doExport([kb.metadata.name]);
+}
+async function doExport(names: string[]) {
+  exporting.value = true;
+  try {
+    const response = await axiosInstance.post(
+      `${API_PREFIX}/knowledgebases/export`,
+      { names },
+      { responseType: "blob" }
+    );
+    const blob = response.data as Blob;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `minidocs${exportTimestamp()}.zip`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    Toast.success(`已导出 ${names.length} 个知识库`);
+  } catch {
+    Toast.error("导出失败，请重试");
+  } finally {
+    exporting.value = false;
+  }
+}
+function exportTimestamp() {
+  const d = new Date();
+  const p = (n: number, len = 2) => String(n).padStart(len, "0");
+  return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}${p(
+    d.getHours()
+  )}${p(d.getMinutes())}${p(d.getSeconds())}${p(d.getMilliseconds(), 3)}`;
+}
+
+// 知识库导入（zip）
+interface ImportPreviewItem {
+  displayName: string;
+  docCount: number;
+  exists: boolean;
+}
+interface ImportResultItem {
+  displayName: string;
+  imported: boolean;
+  message: string;
+}
+const kbImportInput = ref<HTMLInputElement | null>(null);
+const importModalVisible = ref(false);
+const importing = ref(false);
+const importFile = ref<File | null>(null);
+const importPreviewItems = ref<ImportPreviewItem[]>([]);
+const importWarnings = ref<ImportResultItem[]>([]);
+const importOverwrite = ref(true);
+
+function openImportModal() {
+  kbImportInput.value?.click();
+}
+async function onImportFileChange(e: Event) {
+  const input = e.target as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = "";
+  if (!file) {
+    return;
+  }
+  if (!/\.zip$/i.test(file.name)) {
+    Toast.warning("请选择 zip 文件");
+    return;
+  }
+  importFile.value = file;
+  importWarnings.value = [];
+  importing.value = true;
+  try {
+    const formData = new FormData();
+    formData.append("file", file);
+    const { data } = await axiosInstance.post(
+      `${API_PREFIX}/knowledgebases/import/preview`,
+      formData
+    );
+    importPreviewItems.value = data as ImportPreviewItem[];
+    if (!importPreviewItems.value.length) {
+      Toast.error("zip 文件中未解析到知识库");
+      return;
+    }
+    importModalVisible.value = true;
+  } catch {
+    Toast.error("解析 zip 文件失败");
+  } finally {
+    importing.value = false;
+  }
+}
+async function confirmImport() {
+  if (!importFile.value) {
+    return;
+  }
+  importing.value = true;
+  try {
+    const formData = new FormData();
+    formData.append("file", importFile.value);
+    formData.append("strategy", importOverwrite.value ? "overwrite" : "skip");
+    const { data } = await axiosInstance.post(
+      `${API_PREFIX}/knowledgebases/import`,
+      formData
+    );
+    importWarnings.value = data as ImportResultItem[];
+    importModalVisible.value = false;
+    Toast.success("导入完成");
+    clearSelection();
+    await load();
+    await loadStats();
+  } catch {
+    Toast.error("导入失败，请重试");
+  } finally {
+    importing.value = false;
+  }
+}
+function closeImportModal() {
+  if (importing.value) {
+    return;
+  }
+  importModalVisible.value = false;
+  importFile.value = null;
+  importPreviewItems.value = [];
+}
 
 // 批量选择
 const selectedNames = ref<string[]>([]);
@@ -182,12 +350,13 @@ async function load() {
       params: {
         page: page.value,
         size: size.value,
+        sortBy: sortBy.value,
         keyword: keyword.value || undefined,
         publicVisible:
           publicVisible.value === undefined ? undefined : publicVisible.value,
       },
     });
-    kbs.value = sortItems(data.items);
+    kbs.value = data.items;
     total.value = data.total;
   } finally {
     loading.value = false;
@@ -202,34 +371,6 @@ function onKeywordInput() {
     page.value = 1;
     load();
   }, 350);
-}
-
-function sortItems(items: KnowledgeBase[]) {
-  const list = [...items];
-  switch (sortBy.value) {
-    case "name":
-      list.sort((a, b) => a.spec.displayName.localeCompare(b.spec.displayName));
-      break;
-    case "docCount":
-      list.sort((a, b) => (b.status?.docCount || 0) - (a.status?.docCount || 0));
-      break;
-    case "createTime":
-      list.sort(
-        (a, b) =>
-          new Date(b.metadata.creationTimestamp || 0).getTime() -
-          new Date(a.metadata.creationTimestamp || 0).getTime()
-      );
-      break;
-    case "updateTime":
-    default:
-      list.sort(
-        (a, b) =>
-          new Date(b.status?.lastPublishTime || b.metadata.creationTimestamp || 0).getTime() -
-          new Date(a.status?.lastPublishTime || a.metadata.creationTimestamp || 0).getTime()
-      );
-      break;
-  }
-  return list;
 }
 
 function search() {
@@ -270,6 +411,8 @@ function openCreate() {
   form.displayName = "";
   form.description = "";
   form.logo = "";
+  form.cover = "";
+  form.priority = 10;
   form.tags = [];
   form.members = [];
   form.publicVisible = false;
@@ -282,6 +425,8 @@ function openEdit(kb: KnowledgeBase) {
   form.displayName = kb.spec.displayName;
   form.description = kb.spec.description || "";
   form.logo = kb.spec.logo || "";
+  form.cover = kb.spec.cover || "";
+  form.priority = kb.spec.priority ?? 10;
   form.tags = kb.spec.tags || [];
   form.members = kb.spec.members || [];
   form.publicVisible = !!kb.spec.publicVisible;
@@ -299,6 +444,8 @@ async function save() {
       displayName: form.displayName,
       description: form.description || undefined,
       logo: form.logo || undefined,
+      cover: form.cover || undefined,
+      priority: form.priority == null ? undefined : form.priority,
       tags: form.tags.filter(Boolean),
       members: form.members,
       publicVisible: form.publicVisible,
@@ -389,6 +536,19 @@ onMounted(() => {
         集中管理与组织团队的知识内容
       </template>
       <template #actions>
+        <VButton type="secondary" @click="openImportModal">
+          <template #icon>
+            <IconUpload class="h-4 w-4" />
+          </template>
+          导入知识库
+        </VButton>
+        <input
+          ref="kbImportInput"
+          type="file"
+          accept=".zip,application/zip"
+          class="hidden-file-input"
+          @change="onImportFileChange"
+        />
         <VButton type="primary" @click="openCreate">
           <template #icon>
             <IconAddCircle class="h-4 w-4" />
@@ -472,6 +632,12 @@ onMounted(() => {
           </span>
           <VSpace>
             <VButton size="sm" type="secondary" @click="clearSelection">取消选择</VButton>
+            <VButton size="sm" type="secondary" :loading="exporting" @click="exportSelected">
+              <template #icon>
+                <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v10"/><polyline points="7 10 12 15 17 10"/><path d="M4 19h16"/></svg>
+              </template>
+              导出所选
+            </VButton>
             <VButton size="sm" type="danger" @click="batchRemove">
               <template #icon>
                 <IconDeleteBin class="h-3.5 w-3.5" />
@@ -525,6 +691,7 @@ onMounted(() => {
               <option value="createTime">最近创建</option>
               <option value="name">名称</option>
               <option value="docCount">文档数</option>
+              <option value="priority">优先级</option>
             </select>
             <div class="view-toggle">
               <button
@@ -650,10 +817,10 @@ onMounted(() => {
             </span>
             <span
               class="kb-meta-item"
-              :title="kb.status?.lastPublishTime ? '更新于 ' + formatTime(kb.status.lastPublishTime) : '创建于 ' + formatTime(kb.metadata.creationTimestamp)"
+              :title="kb.spec?.updateTime ? '更新于 ' + formatTime(kb.spec.updateTime) : '创建于 ' + formatTime(kb.metadata.creationTimestamp)"
             >
               更新于
-              {{ formatRelativeTime(kb.status?.lastPublishTime || kb.metadata.creationTimestamp) }}
+              {{ formatRelativeTime(kb.spec?.updateTime || kb.metadata.creationTimestamp) }}
             </span>
           </div>
         </div>
@@ -672,6 +839,14 @@ onMounted(() => {
               进入
             </VButton>
             <div class="kb-card-actions">
+              <button
+                class="icon-btn icon-btn-export"
+                title="导出"
+                aria-label="导出"
+                @click.stop="exportOne(kb)"
+              >
+                <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v10"/><polyline points="7 10 12 15 17 10"/><path d="M4 19h16"/></svg>
+              </button>
               <button
                 class="icon-btn icon-btn-edit"
                 title="编辑"
@@ -753,6 +928,14 @@ onMounted(() => {
             </div>
             <div class="kb-list-actions">
               <button
+                class="icon-btn icon-btn-export"
+                title="导出"
+                aria-label="导出"
+                @click.stop="exportOne(kb)"
+              >
+                <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v10"/><polyline points="7 10 12 15 17 10"/><path d="M4 19h16"/></svg>
+              </button>
+              <button
                 class="icon-btn icon-btn-edit"
                 title="编辑"
                 aria-label="编辑"
@@ -820,6 +1003,50 @@ onMounted(() => {
           placeholder="https://example.com/logo.png"
           help="填写后可展示为知识库卡片图标"
         />
+        <div class="mb-4">
+          <label class="formkit-label block text-sm font-medium text-gray-700">
+            封面
+          </label>
+          <div class="kb-cover-field">
+            <div class="kb-cover-preview">
+              <img v-if="form.cover" :src="form.cover" alt="知识库封面" />
+              <span v-else class="kb-cover-placeholder">无封面</span>
+            </div>
+            <div class="kb-cover-actions">
+              <VButton size="sm" type="primary" @click="triggerKbCover">
+                <template #icon>
+                  <IconUpload class="h-3.5 w-3.5" />
+                </template>
+                上传封面
+              </VButton>
+              <input
+                ref="kbCoverInput"
+                type="file"
+                accept="image/*"
+                class="hidden-file-input"
+                @change="onKbCoverChange"
+              />
+              <button
+                v-if="form.cover"
+                class="kb-cover-remove"
+                @click="form.cover = ''"
+              >
+                移除
+              </button>
+            </div>
+          </div>
+          <p class="formkit-help mt-1 text-xs text-gray-500">
+            支持上传本地图片作为封面，或填入图片链接
+          </p>
+        </div>
+        <FormKit
+          v-model="form.priority"
+          label="优先级（排序权重）"
+          type="number"
+          name="priority"
+          min="0"
+          help="数字越小，在列表中选择“优先级”排序时越靠前"
+        />
         <TagInput
           v-model="form.tags"
           label="标签"
@@ -850,6 +1077,78 @@ onMounted(() => {
         </VSpace>
       </template>
     </VModal>
+
+    <VModal
+      v-model:visible="importModalVisible"
+      title="导入知识库"
+      :width="560"
+    >
+      <div class="flex flex-col gap-4">
+        <p class="text-sm text-gray-600">
+          将根据 zip 包内的 <code>config.json</code> 还原知识库及其文档层级结构：
+        </p>
+        <div class="import-preview-list">
+          <div
+            v-for="item in importPreviewItems"
+            :key="item.displayName"
+            class="import-preview-row"
+          >
+            <div class="import-preview-main">
+              <span class="import-preview-name">{{ item.displayName }}</span>
+              <span class="import-preview-sub">{{ item.docCount }} 篇文档</span>
+            </div>
+            <div class="import-preview-status">
+              <VTag v-if="item.exists" type="warning" size="sm">已存在，将被覆盖</VTag>
+              <VTag v-else type="success" size="sm">新知识库</VTag>
+            </div>
+          </div>
+        </div>
+        <div class="flex items-center gap-3">
+          <span class="text-sm text-gray-700">遇到同名知识库时：</span>
+          <div class="flex items-center gap-1">
+            <label class="import-radio-label">
+              <input
+                v-model="importOverwrite"
+                type="radio"
+                :value="true"
+                class="mr-1"
+              />
+              覆盖
+            </label>
+            <label class="import-radio-label">
+              <input
+                v-model="importOverwrite"
+                type="radio"
+                :value="false"
+                class="mr-1"
+              />
+              跳过
+            </label>
+          </div>
+        </div>
+      </div>
+      <template #footer>
+        <VSpace>
+          <VButton type="secondary" :disabled="importing" @click="closeImportModal">
+            取消
+          </VButton>
+          <VButton type="primary" :loading="importing" @click="confirmImport">
+            开始导入
+          </VButton>
+        </VSpace>
+      </template>
+    </VModal>
+
+    <div v-if="importWarnings.length" class="import-result-toast">
+      <div
+        v-for="w in importWarnings"
+        :key="w.displayName"
+        class="import-result-item"
+      >
+        <span class="import-result-name">{{ w.displayName }}</span>
+        <span class="import-result-msg">{{ w.message }}</span>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -1657,5 +1956,171 @@ onMounted(() => {
 
 .kb-card {
   animation: fadeInUp 0.25s ease-out both;
+}
+
+/* ========== 隐藏文件输入 ========== */
+.hidden-file-input {
+  display: none;
+}
+
+/* ========== 导出按钮 ========== */
+.icon-btn-export {
+  background: #fffbeb;
+  color: #d97706;
+}
+
+.icon-btn-export:hover {
+  background: #fef3c7;
+  color: #b45309;
+  border-color: #fde68a;
+}
+
+/* ========== 知识库封面上传 ========== */
+.kb-cover-field {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+  margin-top: 0.375rem;
+}
+
+.kb-cover-preview {
+  width: 7rem;
+  height: 4rem;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.5rem;
+  border: 1px solid #e8e8e8;
+  background: #fafafa;
+  overflow: hidden;
+}
+
+.kb-cover-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.kb-cover-placeholder {
+  font-size: 0.75rem;
+  color: #bfbfbf;
+}
+
+.kb-cover-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.375rem;
+}
+
+.kb-cover-remove {
+  padding: 0;
+  font-size: 0.75rem;
+  color: #ff4d4f;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+
+.kb-cover-remove:hover {
+  text-decoration: underline;
+}
+
+/* ========== 导入知识库预览 ========== */
+.import-preview-list {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.5rem;
+  overflow: hidden;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.import-preview-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.625rem 0.875rem;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.import-preview-row:last-child {
+  border-bottom: none;
+}
+
+.import-preview-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  min-width: 0;
+}
+
+.import-preview-name {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #111827;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.import-preview-sub {
+  font-size: 0.75rem;
+  color: #6b7280;
+}
+
+.import-preview-status {
+  flex-shrink: 0;
+}
+
+.import-radio-label {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.875rem;
+  color: #374151;
+  cursor: pointer;
+  padding: 0 0.25rem;
+}
+
+.import-radio-label input {
+  accent-color: #3b82f6;
+}
+
+/* ========== 导入结果浮层 ========== */
+.import-result-toast {
+  position: fixed;
+  right: 1.5rem;
+  bottom: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  z-index: 1000;
+}
+
+.import-result-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  min-width: 16rem;
+  max-width: 22rem;
+  padding: 0.625rem 0.875rem;
+  border-radius: 0.5rem;
+  background: #111827;
+  color: #f9fafb;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+  animation: fadeInUp 0.25s ease-out both;
+}
+
+.import-result-name {
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.import-result-msg {
+  font-size: 0.75rem;
+  color: #d1d5db;
 }
 </style>

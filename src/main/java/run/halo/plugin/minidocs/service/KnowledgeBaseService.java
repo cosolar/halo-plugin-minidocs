@@ -1,6 +1,8 @@
 package run.halo.plugin.minidocs.service;
 
 import java.time.Instant;
+import java.util.Comparator;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
@@ -8,6 +10,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Mono;
+import reactor.util.retry.Retry;
 import run.halo.app.extension.ListOptions;
 import run.halo.app.extension.ListResult;
 import run.halo.app.extension.PageRequestImpl;
@@ -39,10 +42,12 @@ public class KnowledgeBaseService {
     private final ReactiveExtensionClient client;
 
     /**
-     * 分页查询知识库，关键字匹配名称或 metadata.name，支持按可见性筛选。
+     * 分页查询知识库，关键字匹配名称或 metadata.name，支持按可见性筛选与后端排序。
+     * <p>排序与分页在后端内存中进行（全量获取后按 sortBy 排序再分页），保证全局排序正确，
+     * 不依赖 Halo 对 spec 字段的索引排序。
      */
-    public Mono<ListResult<KnowledgeBase>> list(String keyword, Boolean publicVisible, int page,
-        int size) {
+    public Mono<ListResult<KnowledgeBase>> list(String keyword, Boolean publicVisible,
+        String sortBy, int page, int size) {
         var options = ListOptions.builder();
         if (StringUtils.hasText(keyword)) {
             options.fieldQuery(or(
@@ -52,9 +57,57 @@ public class KnowledgeBaseService {
         if (publicVisible != null) {
             options.andQuery(equal("spec.publicVisible", publicVisible));
         }
-        var sort = Sort.by(Order.asc("spec.priority"), Order.asc("metadata.name"));
-        return client.listBy(KnowledgeBase.class, options.build(),
-            PageRequestImpl.of(page, size, sort));
+        var comparator = resolveComparator(sortBy);
+        return client.listAll(KnowledgeBase.class, options.build(), resolveSort(sortBy))
+            .collectList()
+            .map(all -> {
+                all.sort(comparator);
+                var items = ListResult.subList(all, page, size);
+                return new ListResult<>(page, size, all.size(), items);
+            });
+    }
+
+    /**
+     * Halo 存储层排序（与 resolveComparator 一致，双保险）。
+     */
+    private Sort resolveSort(String sortBy) {
+        return switch (sortBy == null ? "updateTime" : sortBy) {
+            case "name" -> Sort.by(Order.asc("spec.displayName"), Order.asc("metadata.name"));
+            case "priority" -> Sort.by(Order.asc("spec.priority"), Order.asc("metadata.name"));
+            case "createTime" -> Sort.by(Order.desc("spec.creationTime"),
+                Order.asc("metadata.name"));
+            case "docCount" -> Sort.by(Order.desc("status.docCount"), Order.asc("metadata.name"));
+            default -> Sort.by(Order.desc("spec.updateTime"), Order.asc("metadata.name"));
+        };
+    }
+
+    private Comparator<KnowledgeBase> resolveComparator(String sortBy) {
+        Comparator<KnowledgeBase> primary;
+        switch (sortBy == null ? "updateTime" : sortBy) {
+            case "name" -> primary = Comparator.comparing(
+                (KnowledgeBase kb) -> kb.getSpec() == null || kb.getSpec().getDisplayName() == null
+                    ? "" : kb.getSpec().getDisplayName(), String.CASE_INSENSITIVE_ORDER);
+            case "priority" -> primary = Comparator.comparingLong(kb ->
+                kb.getSpec() == null || kb.getSpec().getPriority() == null
+                    ? Long.MAX_VALUE : kb.getSpec().getPriority());
+            case "createTime" -> primary = Comparator.comparingLong(
+                (KnowledgeBase kb) -> timeMillis(kb.getSpec() == null ? null
+                    : kb.getSpec().getCreationTime()))
+                .reversed();
+            case "docCount" -> primary = Comparator.comparingLong(
+                (KnowledgeBase kb) -> kb.getStatus() == null
+                    || kb.getStatus().getDocCount() == null ? 0L
+                    : kb.getStatus().getDocCount()).reversed();
+            default -> primary = Comparator.comparingLong(
+                (KnowledgeBase kb) -> timeMillis(kb.getSpec() == null ? null
+                    : kb.getSpec().getUpdateTime()))
+                .reversed();
+        }
+        return primary.thenComparing(kb -> kb.getMetadata().getName());
+    }
+
+    private long timeMillis(Instant t) {
+        return t == null ? Long.MIN_VALUE : t.toEpochMilli();
     }
 
     /**
@@ -83,9 +136,46 @@ public class KnowledgeBaseService {
     }
 
     /**
-     * 创建知识库（校验名称必填，publicVisible 默认 false）。
+     * 刷新知识库更新时间：在知识库下任一文档发生增删改等内容变动后调用，
+     * 使“最近更新”排序能准确反映知识库内容的实际变更时间。
+     */
+    public Mono<Void> touch(String name) {
+        return Mono.defer(() -> get(name).flatMap(kb -> {
+                kb.getSpec().setUpdateTime(Instant.now());
+                return client.update(kb).then();
+            }))
+            // 批量导入等多文档连续变更时，与 Reconciler 异步刷新知识库统计并发更新同一对象，
+            // 会产生 409 版本冲突（Halo 以 conflict problem 形式抛出）。touch 只是刷新
+            // “最近更新”时间，属非关键写操作：稍作重试后任何失败都静默降级，不阻断主流程。
+            .retryWhen(Retry.max(2))
+            .onErrorResume(e -> Mono.empty());
+    }
+
+    /**
+     * 按显示名称查找首个知识库（用于导入时判断是否已存在同名知识库）。
+     */
+    public Mono<KnowledgeBase> findExistingByName(String displayName) {
+        var options = ListOptions.builder()
+            .fieldQuery(equal("spec.displayName", displayName))
+            .build();
+        return client.listBy(KnowledgeBase.class, options,
+                PageRequestImpl.of(1, 1))
+            .flatMap(result -> result.getItems().isEmpty()
+                ? Mono.empty()
+                : Mono.justOrEmpty(result.getItems().get(0)));
+    }
+
+    /**
+     * 创建知识库（校验名称必填，publicVisible 默认 false，自动填充创建人与更新时间）。
      */
     public Mono<KnowledgeBase> create(KnowledgeBase kb) {
+        return create(kb, null);
+    }
+
+    /**
+     * 创建知识库，可指定创建人（通常为当前登录用户）。
+     */
+    public Mono<KnowledgeBase> create(KnowledgeBase kb, String creatorName) {
         if (kb.getSpec() == null || !StringUtils.hasText(kb.getSpec().getDisplayName())) {
             return Mono.error(
                 new ResponseStatusException(HttpStatus.BAD_REQUEST, "知识库名称不能为空"));
@@ -93,11 +183,20 @@ public class KnowledgeBaseService {
         if (kb.getSpec().getPublicVisible() == null) {
             kb.getSpec().setPublicVisible(false);
         }
+        // 创建知识库时默认写入创建时间与更新时间
+        var now = Instant.now();
+        if (kb.getSpec().getCreationTime() == null) {
+            kb.getSpec().setCreationTime(now);
+        }
+        kb.getSpec().setUpdateTime(now);
+        if (!StringUtils.hasText(kb.getSpec().getCreatorName())) {
+            kb.getSpec().setCreatorName(StringUtils.hasText(creatorName) ? creatorName : "unknown");
+        }
         return client.create(kb);
     }
 
     /**
-     * 更新知识库（整体替换 spec）。
+     * 更新知识库（整体替换 spec），并刷新更新时间。
      */
     public Mono<KnowledgeBase> update(String name, KnowledgeBase update) {
         return get(name).flatMap(kb -> {
@@ -109,6 +208,12 @@ public class KnowledgeBaseService {
                 return Mono.error(
                     new ResponseStatusException(HttpStatus.BAD_REQUEST, "知识库名称不能为空"));
             }
+            // 整体替换 spec，保留原始创建人
+            if (!StringUtils.hasText(update.getSpec().getCreatorName())
+                && StringUtils.hasText(kb.getSpec().getCreatorName())) {
+                update.getSpec().setCreatorName(kb.getSpec().getCreatorName());
+            }
+            update.getSpec().setUpdateTime(Instant.now());
             kb.setSpec(update.getSpec());
             return client.update(kb);
         });
@@ -219,8 +324,8 @@ public class KnowledgeBaseService {
             .flatMap(count -> client.listAll(KnowledgeBaseDoc.class, publishedDocs,
                     Sort.by(Order.desc("spec.publishTime")))
                 .next()
-                .map(doc -> doc.getSpec().getPublishTime())
-                .defaultIfEmpty(null)
+                .map(doc -> Optional.ofNullable(doc.getSpec().getPublishTime()))
+                .defaultIfEmpty(Optional.empty())
                 .zipWith(client.fetch(KnowledgeBase.class, kbName))
                 .flatMap(tuple -> {
                     var kb = tuple.getT2();
@@ -230,8 +335,10 @@ public class KnowledgeBaseService {
                     var status = kb.getStatus() == null
                         ? new KnowledgeBase.Status() : kb.getStatus();
                     status.setDocCount(Math.toIntExact(count));
-                    status.setLastPublishTime(tuple.getT1());
+                    status.setLastPublishTime(tuple.getT1().orElse(null));
                     kb.setStatus(status);
+                    // 删除等变更顺带刷新“最近更新”，避免与 refreshStats 重复更新知识库
+                    kb.getSpec().setUpdateTime(Instant.now());
                     return client.update(kb).then();
                 }));
     }

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, onMounted, reactive, ref, watch } from "vue";
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import {
   Dialog,
@@ -20,15 +20,15 @@ import {
   IconSave,
   IconSendPlaneFill,
   IconDeleteBin,
-  IconEye,
   IconClipboardLine,
   IconSettings,
   IconSearch,
   IconClose,
   IconBookRead,
   IconInformation,
+  IconUpload,
 } from "@halo-dev/components";
-import { axiosInstance } from "@halo-dev/api-client";
+import { axiosInstance, consoleApiClient } from "@halo-dev/api-client";
 import { utils } from "@halo-dev/ui-shared";
 // cherry-markdown 完整包体积较大，按需懒加载
 const MarkdownEditor = defineAsyncComponent(
@@ -37,11 +37,15 @@ const MarkdownEditor = defineAsyncComponent(
 import { htmlToMarkdown } from "../utils/markdown";
 
 interface KnowledgeBase {
-  metadata: { name: string };
+  metadata: { name: string; creationTimestamp?: string };
   spec: {
     displayName: string;
     description?: string;
     publicVisible?: boolean;
+    creatorName?: string;
+    creationTime?: string;
+    cover?: string;
+    updateTime?: string;
     [key: string]: unknown;
   };
 }
@@ -58,11 +62,16 @@ interface DocTreeNode {
 }
 
 interface KnowledgeBaseDoc {
-  metadata: { name: string };
+  metadata: { name: string; creationTimestamp?: string };
   spec: {
     knowledgeBaseName: string;
     title: string;
     slug?: string;
+    author?: string;
+    creationTime?: string;
+    cover?: string;
+    summary?: string;
+    updateTime?: string;
     content?: string;
     contentHtml?: string;
     parentName?: string;
@@ -98,12 +107,26 @@ const docForm = reactive({
   markdown: "",
   slug: "",
   priority: "",
+  author: "",
+  cover: "",
+  summary: "",
+  phase: "draft",
 });
 const moveParent = ref("");
 const moveModalVisible = ref(false);
 const createModalVisible = ref(false);
 const createTitle = ref("");
 const parentTarget = ref<DocTreeNode | null>(null);
+
+// 文档封面上传
+const docCoverInput = ref<HTMLInputElement | null>(null);
+
+// 批量导入 Markdown
+const importModalVisible = ref(false);
+const importParent = ref("");
+const importFiles = ref<File[]>([]);
+const importFileInput = ref<HTMLInputElement | null>(null);
+const importing = ref(false);
 // 字数惰性计算，避免每字符输入都对大字符串 replace 一次
 const wordCount = computed(() =>
   docForm.markdown ? docForm.markdown.replace(/\s/g, "").length : 0
@@ -121,6 +144,40 @@ const markdownEditorRef = ref<{
 
 const expanded = ref<Set<string>>(new Set());
 const allExpanded = ref(false);
+
+// 左侧边栏拖拽调整宽度（默认 280px，可拖 220~600px），右侧主区随 flex 自动跟随
+const sidebarWidth = ref(280);
+let resizeStartX = 0;
+let resizeStartWidth = 280;
+function startResize(e: PointerEvent) {
+  if ((e.target as HTMLElement).closest("button, a, input, select, textarea")) {
+    return;
+  }
+  resizeStartX = e.clientX;
+  resizeStartWidth = sidebarWidth.value;
+  window.addEventListener("pointermove", onResizeMove);
+  window.addEventListener("pointerup", onResizeEnd);
+  document.body.style.cursor = "col-resize";
+  document.body.style.userSelect = "none";
+  window.getSelection()?.removeAllRanges();
+  e.preventDefault();
+}
+function onResizeMove(e: PointerEvent) {
+  const w = resizeStartWidth + (e.clientX - resizeStartX);
+  sidebarWidth.value = Math.min(600, Math.max(220, w));
+}
+function onResizeEnd() {
+  window.removeEventListener("pointermove", onResizeMove);
+  window.removeEventListener("pointerup", onResizeEnd);
+  document.body.style.cursor = "";
+  document.body.style.userSelect = "";
+}
+onBeforeUnmount(() => {
+  window.removeEventListener("pointermove", onResizeMove);
+  window.removeEventListener("pointerup", onResizeEnd);
+  document.body.style.cursor = "";
+  document.body.style.userSelect = "";
+});
 
 // 搜索
 const searchKeyword = ref("");
@@ -171,10 +228,20 @@ const lineCount = computed(() =>
   docForm.markdown ? docForm.markdown.split("\n").length : 0
 );
 
-// 当前文档更新时间
+// 当前文档作者（创建人，系统自动写入）
+const docAuthor = computed(() => doc.value?.spec.author?.trim() || "-");
+
+// 当前文档创建时间：优先后端 spec.creationTime，回退到 metadata.creationTimestamp
+const createdTime = computed(() => {
+  const t =
+    doc.value?.spec.creationTime || doc.value?.metadata?.creationTimestamp;
+  return t ? utils.date.format(t, "YYYY-MM-DD HH:mm") : "-";
+});
+
+// 当前文档更新时间：优先后端记录的 updateTime，回退到创建时间，避免显示 "-"
 const updateTime = computed(() => {
-  const time = doc.value?.spec.publishTime;
-  return time ? utils.date.format(time, "YYYY-MM-DD HH:mm") : "-";
+  const t = doc.value?.spec.updateTime || doc.value?.metadata?.creationTimestamp;
+  return t ? utils.date.format(t, "YYYY-MM-DD HH:mm") : "-";
 });
 
 const flattened = computed<FlattenedNode[]>(() => {
@@ -626,6 +693,10 @@ async function selectDoc(node: DocTreeNode) {
     docForm.markdown = normalizeContent(data.spec.content || "");
     docForm.slug = data.spec.slug || "";
     docForm.priority = data.spec.priority?.toString() || "";
+    docForm.author = data.spec.author || "";
+    docForm.cover = data.spec.cover || "";
+    docForm.summary = data.spec.summary || "";
+    docForm.phase = data.spec.phase || "draft";
     moveParent.value = data.spec.parentName || "";
     tags.value = data.spec.tags || [];
     
@@ -661,6 +732,10 @@ async function saveDoc() {
         content: markdown,
         contentHtml: markdownEditorRef.value?.getHtml() || "",
         slug: docForm.slug.trim() || undefined,
+        author: docForm.author.trim() || undefined,
+        cover: docForm.cover.trim() || undefined,
+        summary: docForm.summary.trim() || undefined,
+        phase: docForm.phase,
         tags: tags.value,
         priority: docForm.priority === "" ? undefined : Number(docForm.priority),
       },
@@ -693,36 +768,6 @@ async function publishDoc() {
     doc.value.spec.phase = "published";
   }
   await loadTree();
-}
-
-// 归档 / 取消归档（直接更新 phase）
-async function setPhase(phase: string, tip: string) {
-  if (!selected.value || !doc.value) {
-    return;
-  }
-  const payload = {
-    spec: {
-      ...doc.value.spec,
-      phase,
-    },
-  };
-  await axiosInstance.put(
-    `${API_PREFIX}/knowledgebases/${kbName}/docs/${selected.value.name}`,
-    payload
-  );
-  Toast.success(tip);
-  if (doc.value) {
-    doc.value.spec.phase = phase;
-  }
-  await loadTree();
-}
-
-function archiveDoc() {
-  setPhase("archived", "文档已归档");
-}
-
-function unarchiveDoc() {
-  setPhase("draft", "文档已取消归档");
 }
 
 function openMoveModal() {
@@ -811,6 +856,24 @@ function removeDoc() {
   removeNode(selected.value);
 }
 
+// 从目录树中乐观移除节点（含其子树），避免删除后刷新树接口异常时 UI 不更新
+function removeNodeFromTree(name: string) {
+  const remove = (nodes: DocTreeNode[]): boolean => {
+    for (let i = nodes.length - 1; i >= 0; i--) {
+      const n = nodes[i];
+      if (n.name === name) {
+        nodes.splice(i, 1);
+        return true;
+      }
+      if (n.children?.length && remove(n.children)) {
+        return true;
+      }
+    }
+    return false;
+  };
+  remove(tree.value);
+}
+
 function removeNode(node: DocTreeNode) {
   Dialog.warning({
     title: "删除文档",
@@ -818,15 +881,25 @@ function removeNode(node: DocTreeNode) {
     confirmText: "删除",
     cancelText: "取消",
     onConfirm: async () => {
-      await axiosInstance.delete(
-        `${API_PREFIX}/knowledgebases/${kbName}/docs/${node.name}`
-      );
-      Toast.success("文档已删除");
-      if (selected.value?.name === node.name) {
-        selected.value = null;
-        doc.value = null;
+      try {
+        await axiosInstance.delete(
+          `${API_PREFIX}/knowledgebases/${kbName}/docs/${node.name}`
+        );
+        Toast.success("文档已删除");
+        removeNodeFromTree(node.name);
+        if (selected.value?.name === node.name) {
+          selected.value = null;
+          doc.value = null;
+        }
+        try {
+          await loadTree();
+        } catch (err) {
+          console.error("删除后刷新目录树失败，已使用本地乐观更新结果", err);
+        }
+      } catch (err) {
+        Toast.error(`删除失败：${(err as Error)?.message || err}`);
+        console.error(err);
       }
-      await loadTree();
     },
   });
 }
@@ -902,6 +975,10 @@ async function saveSettings() {
         content: markdown,
         contentHtml: markdownEditorRef.value?.getHtml() || "",
         slug: docForm.slug.trim() || undefined,
+        author: docForm.author.trim() || undefined,
+        cover: docForm.cover.trim() || undefined,
+        summary: docForm.summary.trim() || undefined,
+        phase: docForm.phase,
         tags: tags.value,
         priority: docForm.priority === "" ? undefined : Number(docForm.priority),
       },
@@ -941,6 +1018,92 @@ function onTagBackspace() {
   }
 }
 
+// ===== 封面图片上传（结合 Halo 附件上传） =====
+function triggerDocCover() {
+  docCoverInput.value?.click();
+}
+
+async function onDocCoverChange(e: Event) {
+  const input = e.target as HTMLInputElement;
+  const file = input.files?.[0];
+  if (!file) {
+    return;
+  }
+  await uploadCoverFile(file, (url) => {
+    docForm.cover = url;
+  });
+  input.value = "";
+}
+
+async function uploadCoverFile(file: File, onDone: (url: string) => void) {
+  try {
+    const { data } =
+      await consoleApiClient.storage.attachment.uploadAttachmentForConsole({
+        file,
+      });
+    const url = data.status?.permalink;
+    if (url) {
+      onDone(url);
+      Toast.success("封面已上传");
+    } else {
+      Toast.error("上传成功但未获取到图片地址");
+    }
+  } catch {
+    Toast.error("封面上传失败，请重试");
+  }
+}
+
+// ===== 批量导入 Markdown =====
+function openImportModal() {
+  importParent.value = selected.value ? selected.value.name : "";
+  importFiles.value = [];
+  importModalVisible.value = true;
+}
+
+function triggerImportFiles() {
+  importFileInput.value?.click();
+}
+
+function onImportFilesChange(e: Event) {
+  const input = e.target as HTMLInputElement;
+  const files = Array.from(input.files || []).filter((f) =>
+    f.name.toLowerCase().endsWith(".md")
+  );
+  importFiles.value = [...importFiles.value, ...files];
+  input.value = "";
+}
+
+function removeImportFile(index: number) {
+  importFiles.value.splice(index, 1);
+}
+
+async function confirmImport() {
+  if (!importFiles.value.length) {
+    Toast.warning("请选择要导入的 Markdown 文件");
+    return;
+  }
+  importing.value = true;
+  try {
+    const form = new FormData();
+    if (importParent.value) {
+      form.append("parentName", importParent.value);
+    }
+    importFiles.value.forEach((file) => form.append("files", file));
+    const { data } = await axiosInstance.post(
+      `${API_PREFIX}/knowledgebases/${kbName}/docs/import`,
+      form
+    );
+    Toast.success(`已导入 ${data.count} 篇文档`);
+    importModalVisible.value = false;
+    importFiles.value = [];
+    await loadTree();
+  } catch {
+    Toast.error("导入失败，请重试");
+  } finally {
+    importing.value = false;
+  }
+}
+
 onMounted(async () => {
   await Promise.all([loadKb(), loadTree()]);
 });
@@ -950,7 +1113,7 @@ onMounted(async () => {
   <div class="kb-detail">
     <div class="main-layout">
       <!-- 左侧边栏 -->
-      <aside class="sidebar">
+      <aside class="sidebar" :style="{ width: sidebarWidth + 'px' }">
         <!-- 顶部白色 header -->
         <div class="sidebar-top">
           <button class="back-btn" @click="goBack">
@@ -967,6 +1130,9 @@ onMounted(async () => {
           <div class="section-header">
             <span class="section-title">文档目录</span>
             <div class="section-actions">
+              <button class="icon-btn" title="批量导入 Markdown" @click="openImportModal">
+                <IconUpload class="h-4 w-4" />
+              </button>
               <button class="icon-btn" title="新建文档" @click="openCreateDoc">
                 <IconAddCircle class="h-4 w-4" />
               </button>
@@ -1097,19 +1263,31 @@ onMounted(async () => {
               <span>知识库信息</span>
             </div>
             <div class="kb-info-item">
-              <span>文档总数</span>
+              <span>文档数量</span>
               <span class="value">{{ kbStats.total }}</span>
             </div>
             <div class="kb-info-item">
-              <span>公开文档</span>
-              <span class="value">{{ kbStats.published }}</span>
+              <span>权限状态</span>
+              <span class="value">{{
+                kb?.spec?.publicVisible ? "公开" : "私有"
+              }}</span>
             </div>
             <div class="kb-info-item">
-              <span>最后更新</span>
-              <span class="value">{{ formatDate(kbStats.lastUpdate) }}</span>
+              <span>创建人</span>
+              <span class="value">{{ kb?.spec?.creatorName || "-" }}</span>
+            </div>
+            <div class="kb-info-item">
+              <span>创建时间</span>
+              <span class="value">{{
+                formatDate(
+                  kb?.spec?.creationTime || kb?.metadata?.creationTimestamp
+                )
+              }}</span>
             </div>
           </div>
         </div>
+        <!-- 拖拽把手：调整侧边栏宽度 -->
+        <div class="resize-handle" @pointerdown="startResize" title="拖动调整宽度"></div>
       </aside>
 
       <!-- 主内容区 -->
@@ -1151,22 +1329,6 @@ onMounted(async () => {
                   <IconSendPlaneFill class="h-4 w-4" />
                 </template>
                 发布
-              </VButton>
-              <VButton
-                v-if="doc.spec.phase === 'archived'"
-                size="sm"
-                @click="unarchiveDoc"
-              >
-                <template #icon>
-                  <IconEye class="h-4 w-4" />
-                </template>
-                取消归档
-              </VButton>
-              <VButton v-else size="sm" @click="archiveDoc">
-                <template #icon>
-                  <IconFolder class="h-4 w-4" />
-                </template>
-                归档
               </VButton>
               <VButton size="sm" @click="openMoveModal">
                 <template #icon>
@@ -1215,6 +1377,8 @@ onMounted(async () => {
             <div class="status-bar-right">
               <span class="stat-item">字数 {{ wordCount }}</span>
               <span class="stat-item">行数 {{ lineCount }}</span>
+              <span class="stat-item">作者 {{ docAuthor }}</span>
+              <span class="stat-item">创建时间 {{ createdTime }}</span>
               <span class="stat-item">更新时间 {{ updateTime }}</span>
               <button class="status-btn" title="回到顶部" @click="scrollEditorToTop">
                 <IconArrowUpLine class="h-3.5 w-3.5" />
@@ -1242,6 +1406,52 @@ onMounted(async () => {
               <label>文章标题</label>
               <input v-model="docForm.title" type="text" placeholder="输入文章标题" />
               <p class="help-text">修改后保存将同步更新文档名称</p>
+            </div>
+            <div class="form-field">
+              <label>作者（创建人）</label>
+              <input v-model="docForm.author" type="text" placeholder="输入作者用户名" />
+              <p class="help-text">留空保存时由系统自动填入当前操作人</p>
+            </div>
+            <div class="form-field">
+              <label>封面</label>
+              <div class="cover-field">
+                <div class="cover-preview">
+                  <img v-if="docForm.cover" :src="docForm.cover" alt="文档封面" />
+                  <span v-else class="cover-placeholder">无封面</span>
+                </div>
+                <div class="cover-actions">
+                  <VButton size="sm" type="primary" @click="triggerDocCover">
+                    <template #icon>
+                      <IconUpload class="h-3.5 w-3.5" />
+                    </template>
+                    上传封面
+                  </VButton>
+                  <input
+                    ref="docCoverInput"
+                    type="file"
+                    accept="image/*"
+                    class="hidden-input"
+                    @change="onDocCoverChange"
+                  />
+                  <button
+                    v-if="docForm.cover"
+                    class="cover-remove"
+                    @click="docForm.cover = ''"
+                  >
+                    移除
+                  </button>
+                </div>
+              </div>
+              <p class="help-text">支持上传本地图片作为封面，或直接填写图片链接</p>
+            </div>
+            <div class="form-field">
+              <label>摘要</label>
+              <textarea
+                v-model="docForm.summary"
+                rows="3"
+                placeholder="输入文档摘要"
+              ></textarea>
+              <p class="help-text">用于列表展示的文档简介</p>
             </div>
             <div class="form-field">
               <label>别名（slug）</label>
@@ -1358,6 +1568,66 @@ onMounted(async () => {
         </VSpace>
       </template>
     </VModal>
+
+    <!-- 批量导入 Markdown 模态框 -->
+    <VModal v-model:visible="importModalVisible" title="批量导入 Markdown" :width="520">
+      <div class="import-modal-body">
+        <p class="import-modal-tip">选择导入到哪个目录下（设为「顶层」则导入到根目录）：</p>
+        <div class="import-parent-list">
+          <label class="move-option" :class="{ selected: importParent === '' }">
+            <input type="radio" v-model="importParent" value="" />
+            <IconFolder class="move-option-icon" />
+            <span>顶层（根目录）</span>
+          </label>
+          <label
+            v-for="item in moveTargets"
+            :key="item.node.name"
+            class="move-option"
+            :class="{ selected: importParent === item.node.name }"
+            :style="{ paddingLeft: `${8 + item.depth * 20}px` }"
+          >
+            <input type="radio" v-model="importParent" :value="item.node.name" />
+            <IconFolder v-if="hasChildren(item.node)" class="move-option-icon" />
+            <IconPages v-else class="move-option-icon" />
+            <span>{{ item.node.title }}</span>
+          </label>
+        </div>
+
+        <div class="import-files-area">
+          <button class="import-pick-btn" type="button" @click="triggerImportFiles">
+            <IconUpload class="h-4 w-4" />
+            选择 .md 文件
+          </button>
+          <input
+            ref="importFileInput"
+            type="file"
+            accept=".md"
+            multiple
+            class="hidden-input"
+            @change="onImportFilesChange"
+          />
+          <p class="import-tip">支持多选，每个 Markdown 文件导入为一篇文档（标题取文件名）</p>
+          <ul v-if="importFiles.length" class="import-file-list">
+            <li v-for="(file, i) in importFiles" :key="i" class="import-file-item">
+              <IconPages class="h-4 w-4" />
+              <span class="import-file-name">{{ file.name }}</span>
+              <button class="import-file-remove" @click="removeImportFile(i)">
+                <IconClose class="h-3 w-3" />
+              </button>
+            </li>
+          </ul>
+          <p v-else class="import-empty">尚未选择文件</p>
+        </div>
+      </div>
+      <template #footer>
+        <VSpace>
+          <VButton type="secondary" @click="importModalVisible = false">取消</VButton>
+          <VButton type="primary" :loading="importing" @click="confirmImport">
+            开始导入
+          </VButton>
+        </VSpace>
+      </template>
+    </VModal>
   </div>
 </template>
 
@@ -1388,12 +1658,33 @@ onMounted(async () => {
 .sidebar {
   position: relative;
   z-index: 1;
-  flex: 0 0 280px;
+  flex: 0 0 auto;
+  width: 280px;
   display: flex;
   flex-direction: column;
   min-height: 0;
   background: #f5f5f5;
   border-right: 1px solid #e8e8e8;
+  /* 折掉任何横向溢出：树内容由 .tree-scroll 内部纵向滚动，边栏自身绝不横向滚动，
+     避免拖拽把手/窄宽度下的内容把边栏底部撑出一条横向滚动条 */
+  overflow-x: hidden;
+}
+
+/* 拖拽把手：贴在侧边栏右缘，拖动改变宽度（右侧主区随 flex 自动跟随） */
+.resize-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: 8px;
+  cursor: col-resize;
+  z-index: 5;
+  transition: background 0.15s ease;
+}
+
+.resize-handle:hover,
+.resize-handle:active {
+  background: rgba(76, 141, 255, 0.25);
 }
 
 /* 侧边栏顶部白色 header */
@@ -2344,5 +2635,197 @@ onMounted(async () => {
 :deep(.btn-secondary:hover) {
   background: #434343;
   border-color: #434343;
+}
+
+/* 隐藏的原生文件输入 */
+.hidden-input {
+  display: none;
+}
+
+/* 设置抽屉：封面 */
+.cover-field {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+}
+
+.cover-preview {
+  width: 7rem;
+  height: 4rem;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.5rem;
+  border: 1px solid #e8e8e8;
+  background: #fafafa;
+  overflow: hidden;
+}
+
+.cover-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.cover-placeholder {
+  font-size: 0.75rem;
+  color: #bfbfbf;
+}
+
+.cover-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.375rem;
+}
+
+.cover-remove {
+  padding: 0;
+  font-size: 0.75rem;
+  color: #ff4d4f;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+
+.cover-remove:hover {
+  text-decoration: underline;
+}
+
+.form-field textarea {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: #262626;
+  background: #ffffff;
+  border: 1px solid #d9d9d9;
+  border-radius: 0.5rem;
+  outline: none;
+  resize: vertical;
+  transition: all 0.2s ease;
+}
+
+.form-field textarea:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+/* 批量导入 */
+.import-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.import-modal-tip {
+  font-size: 0.8125rem;
+  color: #8c8c8c;
+  margin: 0;
+}
+
+.import-parent-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  max-height: 12rem;
+  overflow-y: auto;
+  padding: 0.25rem 0;
+  border: 1px solid #f0f0f0;
+  border-radius: 0.5rem;
+}
+
+.import-files-area {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+}
+
+.import-pick-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.5rem 0.875rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: #1d4ed8;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.import-pick-btn:hover {
+  background: #dbeafe;
+}
+
+.import-tip {
+  font-size: 0.75rem;
+  color: #bfbfbf;
+  margin: 0;
+}
+
+.import-file-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  max-height: 10rem;
+  overflow-y: auto;
+}
+
+.import-file-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.375rem 0.5rem;
+  background: #fafafa;
+  border: 1px solid #f0f0f0;
+  border-radius: 0.5rem;
+}
+
+.import-file-item svg {
+  flex-shrink: 0;
+  color: #409eff;
+}
+
+.import-file-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.8125rem;
+  color: #595959;
+}
+
+.import-file-remove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  flex-shrink: 0;
+  color: #8c8c8c;
+  background: transparent;
+  border: none;
+  border-radius: 0.25rem;
+  cursor: pointer;
+}
+
+.import-file-remove:hover {
+  color: #ff4d4f;
+  background: #fff1f0;
+}
+
+.import-empty {
+  font-size: 0.8125rem;
+  color: #bfbfbf;
+  margin: 0;
+  padding: 0.375rem 0;
 }
 </style>

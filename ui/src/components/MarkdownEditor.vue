@@ -517,16 +517,27 @@ function scrollToTop() {
   if (!cherry || !hostRef.value) {
     return;
   }
-  // 先尝试滚编辑区（CodeMirror）
+  // 预览模式（previewOnly）：编辑区不可见，CodeMirror 的 scrollDOM 即使存在也不参与渲染，
+  // 真正可滚动的是预览容器。不同版本/布局下可能是 .cherry-previewer 或外层包裹（.cherry-host），
+  // 逐个检测 scrolledHeight>clientHeight 的实例并滚回顶部，保证在任何一种结构下都能生效。
+  if (props.model === "preview") {
+    const host = hostRef.value;
+    const candidates = [
+      host.querySelector<HTMLElement>(".cherry-previewer"),
+      host,
+    ];
+    for (const el of candidates) {
+      if (el && el.scrollHeight > el.clientHeight) {
+        el.scrollTop = 0;
+        break;
+      }
+    }
+    return;
+  }
+  // 编辑/分屏模式：滚编辑区（CodeMirror），预览随滚动同步
   const view = cherry.getCodeMirror() as { scrollDOM?: HTMLElement } | undefined;
   if (view?.scrollDOM) {
     view.scrollDOM.scrollTop = 0;
-    return;
-  }
-  // 只读预览下滚预览内容容器
-  const preview = hostRef.value.querySelector<HTMLElement>(".cherry-previewer");
-  if (preview) {
-    preview.scrollTop = 0;
   }
 }
 

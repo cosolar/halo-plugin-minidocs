@@ -1,9 +1,21 @@
 package run.halo.plugin.minidocs.endpoint;
 
+import java.nio.charset.StandardCharsets;
+import java.security.Principal;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
+import run.halo.app.extension.Metadata;
 import lombok.RequiredArgsConstructor;
+import org.springframework.core.io.buffer.DataBufferUtils;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.http.codec.multipart.FilePart;
+import org.springframework.http.codec.multipart.FormFieldPart;
+import org.springframework.http.codec.multipart.Part;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 import org.springframework.web.reactive.function.server.RouterFunction;
 import org.springframework.web.reactive.function.server.ServerRequest;
 import org.springframework.web.reactive.function.server.ServerResponse;
@@ -40,6 +52,7 @@ public class KnowledgeBaseDocConsoleEndpoint implements CustomEndpoint {
             .PUT("/knowledgebases/{name}/docs/{docName}", accept(MediaType.APPLICATION_JSON),
                 this::updateDoc)
             .DELETE("/knowledgebases/{name}/docs/{docName}", this::deleteDoc)
+            .POST("/knowledgebases/{name}/docs/import", this::importDocs)
             .POST("/knowledgebases/{name}/docs/{docName}/publish", this::publishDoc)
             .POST("/knowledgebases/{name}/docs/{docName}/move", accept(MediaType.APPLICATION_JSON),
                 this::moveDoc)
@@ -72,9 +85,20 @@ public class KnowledgeBaseDocConsoleEndpoint implements CustomEndpoint {
 
     private Mono<ServerResponse> createDoc(ServerRequest request) {
         var kbName = request.pathVariable("name");
+        var author = currentUsername(request);
         return request.bodyToMono(KnowledgeBaseDoc.class)
-            .flatMap(doc -> docService.create(kbName, doc))
+            .flatMap(doc -> author.flatMap(name -> docService.create(kbName, doc, name)))
             .flatMap(doc -> ServerResponse.ok().bodyValue(doc));
+    }
+
+    /**
+     * 当前登录用户名（匿名时为 "unknown"）。
+     */
+    private Mono<String> currentUsername(ServerRequest request) {
+        return request.principal()
+            .map(Principal::getName)
+            .filter(name -> name != null && !name.isBlank())
+            .defaultIfEmpty("unknown");
     }
 
     private Mono<ServerResponse> updateDoc(ServerRequest request) {
@@ -90,6 +114,86 @@ public class KnowledgeBaseDocConsoleEndpoint implements CustomEndpoint {
         var docName = request.pathVariable("docName");
         return docService.delete(kbName, docName)
             .then(ServerResponse.ok().build());
+    }
+
+    /**
+     * 批量导入 Markdown 文档（multipart/form-data）。
+     *
+     * <p>Part 说明：{@code parentName} 为目标父文档名称（可空=根目录）；
+     * 其余 {@code .md} 文件 Part 各导入为一篇文档，标题取文件名（去扩展名）。
+     */
+    private Mono<ServerResponse> importDocs(ServerRequest request) {
+        var kbName = request.pathVariable("name");
+        return request.multipartData().flatMap(parts -> {
+            Part parentPart = parts.getFirst("parentName");
+            String rawParent = parentPart instanceof FormFieldPart field ? field.value() : null;
+            String parentName = StringUtils.hasText(rawParent) ? rawParent : null;
+            List<FilePart> files = parts.get("files").stream()
+                .filter(FilePart.class::isInstance)
+                .map(FilePart.class::cast)
+                .toList();
+            var order = new AtomicInteger(0);
+            return currentUsername(request).flatMap(author ->
+                    importAll(kbName, parentName, files, order, author))
+                .map(count -> Map.of("count", count))
+                .flatMap(ServerResponse.ok()::bodyValue);
+        });
+    }
+
+    private Mono<Integer> importAll(String kbName, String parentName, List<FilePart> files,
+        AtomicInteger order, String author) {
+        if (files.isEmpty()) {
+            return Mono.just(0);
+        }
+        FilePart file = files.get(0);
+        var rest = files.subList(1, files.size());
+        return readFilePart(file)
+            .flatMap(content -> {
+                String title = titleOfFile(file.filename());
+                var doc = new KnowledgeBaseDoc();
+                var md = new Metadata();
+                md.setName(UUID.randomUUID().toString());
+                doc.setMetadata(md);
+                var spec = new KnowledgeBaseDoc.Spec();
+                spec.setKnowledgeBaseName(kbName);
+                spec.setTitle(title);
+                spec.setContent(content);
+                spec.setParentName(parentName);
+                spec.setPriority(order.getAndIncrement());
+                doc.setSpec(spec);
+                return docService.create(kbName, doc, author);
+            })
+            .then(importAll(kbName, parentName, rest, order, author).map(n -> n + 1));
+    }
+
+    private Mono<String> readFilePart(FilePart part) {
+        return DataBufferUtils.join(part.content())
+            .map(buffer -> {
+                var bytes = new byte[buffer.readableByteCount()];
+                buffer.read(bytes);
+                DataBufferUtils.release(buffer);
+                var text = new String(bytes, StandardCharsets.UTF_8);
+                // 剥离 UTF-8 BOM：否则首个标题前缀该不可见字符，导致 # 不被识别为标题
+                if (text.startsWith("\uFEFF")) {
+                    text = text.substring(1);
+                }
+                return text;
+            });
+    }
+
+    private String titleOfFile(String filename) {
+        if (!StringUtils.hasText(filename)) {
+            return "未命名文档";
+        }
+        String base = filename;
+        int slash = Math.max(base.lastIndexOf('/'), base.lastIndexOf('\\'));
+        if (slash >= 0) {
+            base = base.substring(slash + 1);
+        }
+        if (base.toLowerCase().endsWith(".md")) {
+            base = base.substring(0, base.length() - 3);
+        }
+        return StringUtils.hasText(base) ? base : "未命名文档";
     }
 
     private Mono<ServerResponse> publishDoc(ServerRequest request) {

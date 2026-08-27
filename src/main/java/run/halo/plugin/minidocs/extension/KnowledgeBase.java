@@ -57,6 +57,18 @@ public class KnowledgeBase extends AbstractExtension {
 
         @Schema(description = "排序权重，越小越靠前")
         private Integer priority;
+
+        @Schema(description = "创建人（创建人用户名）")
+        private String creatorName;
+
+        @Schema(description = "创建时间（创建时由系统自动写入）")
+        private Instant creationTime;
+
+        @Schema(description = "封面图片地址")
+        private String cover;
+
+        @Schema(description = "最后一次更新时间")
+        private Instant updateTime;
     }
 
     @Data

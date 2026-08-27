@@ -42,6 +42,15 @@ public class KnowledgeBasePlugin extends BasePlugin {
             indexSpecs.add(IndexSpecs.<KnowledgeBase, Boolean>single("spec.publicVisible",
                     Boolean.class)
                 .indexFunc(kb -> kb.getSpec() == null ? null : kb.getSpec().getPublicVisible()));
+            indexSpecs.add(IndexSpecs.<KnowledgeBase, Instant>single("spec.creationTime",
+                    Instant.class)
+                .indexFunc(kb -> kb.getSpec() == null ? null : kb.getSpec().getCreationTime()));
+            indexSpecs.add(IndexSpecs.<KnowledgeBase, Instant>single("spec.updateTime",
+                    Instant.class)
+                .indexFunc(kb -> kb.getSpec() == null ? null : kb.getSpec().getUpdateTime()));
+            indexSpecs.add(IndexSpecs.<KnowledgeBase, Integer>single("status.docCount",
+                    Integer.class)
+                .indexFunc(kb -> kb.getStatus() == null ? null : kb.getStatus().getDocCount()));
         });
         schemeManager.register(KnowledgeBaseDoc.class, indexSpecs -> {
             // 文档查询索引：按知识库、父文档、状态、发布时间、标签、别名、标题过滤/排序

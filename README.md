@@ -1,43 +1,47 @@
-# halo-plugin-minidocs
+# 知识库 MiniDocs
 
-在 Halo 中搭建团队/个人知识库的插件：多知识库管理、文档树、Markdown 编辑、分类标签与权限控制，并提供公开接口与 Finder 能力，方便第三方主题开发用户侧页面。
+MiniDocs 是 Halo 2.x 的轻量知识库插件，用于搭建团队 / 个人知识库：多知识库管理、文档树、Markdown 编辑、分类标签与权限控制，并将知识库内容通过公开接口与 Finder 暴露给第三方主题，方便开发用户侧文档站点。
 
-- 目标平台：Halo `>= 2.26.0`
-- 技术栈：Spring Boot + Spring WebFlux（Java 21）+ Vue 3 + TypeScript
-- 构建：Gradle（含 `run.halo.plugin.devtools`）+ pnpm
+插件同时提供 Console 管理界面、`minidocsFinder` Finder API 和匿名公共 REST API，适用于传统 Thymeleaf 主题和前端框架渲染的文档页。
 
-## 功能概览
+> 目标平台：Halo `>= 2.26.0`
 
-| 模块 | 说明 |
-| --- | --- |
-| 知识库管理 | 多知识库 CRUD、公开/私有切换、成员授权、排序 |
-| 文档管理 | 文档树、Markdown 编辑、slug 别名、发布状态、标签 |
-| 系统设置 | 站点名称/描述、匿名阅读、文档导出开关 |
-| 管理界面 | Console 列表页 + 详情页（文档树 + 编辑器） |
-| 公开接口 | `/apis/api.minidocs.halo.run/v1alpha1/**` 只读 API + `${minidocsFinder}` Finder |
-| 权限 | RoleTemplate 管理/只读角色、匿名聚合、UI 权限控制 |
+## 功能特性
 
-详细的功能列表、开发细节与支持度评估见 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)。
+- 知识库管理：支持多知识库创建、编辑、删除，公开 / 私有切换、成员授权与排序。
+- 文档管理：支持文档树层级、Markdown 编辑、slug 别名、发布 / 草稿状态、标签与封面。
+- 分类标签：知识库与文档均支持标签，便于按主题归类与检索。
+- 权限控制：内置「知识库查看」「知识库管理」角色模板；可开启「允许未登录用户阅读公开知识库」控制匿名访问。
+- 文档发布：支持单篇文档发布，发布后内容通过公开接口与 Finder 对外可见。
+- 文档导入导出：支持批量导入文档，以及将文档导出为 Markdown（受导出开关约束）。
+- 主题适配：提供 `minidocsFinder` Finder API 与匿名公共 REST API，便于主题渲染知识库列表、文档树与文档详情。
 
-## 目录结构
+## 安装使用
 
-```
-├── src/main/
-│   ├── java/run/halo/plugin/minidocs/   # 后端：插件入口、扩展模型、服务与端点
-│   └── resources/
-│       ├── plugin.yaml                  # 插件清单
-│       ├── logo.svg                     # 插件 Logo
-│       └── extensions/                  # 扩展 YAML 声明（设置、角色模板等）
-├── ui/                                  # 前端（Vue 3 + TypeScript + Vite）
-│   └── src/
-│       ├── index.ts                     # 插件 UI 入口（definePlugin）
-│       └── views/                       # 管理页面
-├── docs/                                # 开发文档
-├── build.gradle / settings.gradle / gradle.properties
-└── gradlew(.bat) / gradle/wrapper/
-```
+1. 下载插件 JAR：
+   - GitHub Releases：访问本项目 Releases 下载 Assets 中的 JAR 文件。
+   - Halo 应用市场：在 Halo 后台「应用市场」搜索 MiniDocs 安装。
+2. 在 Halo Console 的插件管理中上传并安装插件，安装和更新方式可参考：<https://docs.halo.run/user-guide/plugins>
+3. 安装完成后，访问 Console 左侧的**知识库**菜单管理知识库与文档。
+4. 如需游客直接访问公开知识库，请在插件设置中开启**允许未登录用户阅读公开知识库**；如需提供文档下载，请确认**允许导出文档**已开启。
+5. 主题侧接入方式见下方「主题适配」。
 
-## 开发
+## 主题适配
+
+此插件为主题端提供了：
+
+- **Finder API** `minidocsFinder`：支持 `listKnowledgeBases(page, size)`、`getKnowledgeBase(name)`、`listDocs(kbName, page, size)`、`getDoc(kbName, docName)`、`getDocTree(kbName)` 和 `getDocBySlug(slug)`，用于在 Thymeleaf / FreeMarker 模板中渲染知识库与文档。
+- **公共 REST API**：提供匿名知识库 / 文档查询接口（含文档树、按 slug 获取），可用于前端框架、小程序或服务端集成。
+- **数据可见性**：Finder 与公开 API 仅返回 `publicVisible=true` 的知识库及其 `phase=published` 的文档；匿名访问受插件「允许未登录用户阅读」设置约束。
+
+详细文档请参考：
+
+- [主题 API 文档](./docs/minidocs-theme-api.md) — 路由、Finder API、Markdown 渲染与类型定义。
+- [REST API 文档](./docs/minidocs-rest-api.md) — 公共 API、Console API 和标准 CRUD 端点。
+
+## 开发文档
+
+本地开发、构建与调试说明请参考 [开发文档](./docs/dev.md)。
 
 环境要求：JDK 21、pnpm、Docker（DevTools 运行 Halo 服务）。
 
