@@ -4,136 +4,1013 @@
   th:replace="~{layout :: html(head = ~{::head}, content = ~{::content})}"
 >
   <th:block th:fragment="head">
-    <title th:text="${knowledgeBase.spec.displayName} + ' - 知识库'"></title>
+    <title th:text="${gate ? '知识库分享访问' : (knowledgeBase != null and knowledgeBase.spec.displayName != null ? knowledgeBase.spec.displayName + ' - 知识库分享' : '知识库分享')}">知识库分享</title>
     <style>
-      .minidocs-share {
-        --md-sidebar-w: 280px;
-        --md-outline-w: 240px;
-        display: grid;
-        grid-template-columns: var(--md-sidebar-w) minmax(0, 1fr) var(--md-outline-w);
-        gap: 24px;
-        max-width: 1400px;
-        margin: 0 auto;
-        padding: 24px 16px;
-        box-sizing: border-box;
+      :root {
+        --md-primary: #10b981;
+        --md-primary-deep: #059669;
+        --md-primary-ink: #065f46;
+        --md-primary-bg: rgba(16, 185, 129, .12);
+        --md-bg1: #ffffff;
+        --md-bg2: #f6f8f9;
+        --md-card: #ffffff;
+        --md-border: #e7edef;
+        --md-title: #111827;
+        --md-body: #374151;
+        --md-sub: #6b7280;
+        --md-code-bg: #0f172a;
+        --md-code-fg: #e2e8f0;
+        --md-nav-h: 56px;
+        --md-bottom-h: 40px;
       }
-      .md-sidebar, .md-outline {
-        position: sticky;
-        top: 24px;
-        align-self: start;
-        max-height: calc(100vh - 48px);
-        overflow: auto;
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --md-bg1: #101a19;
+          --md-bg2: #0c1413;
+          --md-card: #15211f;
+          --md-border: #223230;
+          --md-title: #eaf3f1;
+          --md-body: #c3d2cf;
+          --md-sub: #93a5a3;
+          --md-primary-bg: rgba(16, 185, 129, .18);
+        }
       }
-      .md-sidebar {
-        border-right: 1px solid var(--md-border, #e5e7eb);
-        padding-right: 16px;
-      }
-      .md-outline {
-        border-left: 1px solid var(--md-border, #e5e7eb);
-        padding-left: 16px;
-        font-size: 14px;
-      }
-      .md-tree, .md-tree ul {
-        list-style: none;
+      * { box-sizing: border-box; }
+      html, body { height: 100%; }
+      body {
         margin: 0;
-        padding: 0;
+        padding-top: var(--md-nav-h);
+        background: var(--md-bg2);
+        color: var(--md-body);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+          "Microsoft YaHei", Roboto, sans-serif;
       }
-      .md-tree ul { padding-left: 16px; }
-      .md-tree a {
-        display: block;
-        padding: 6px 8px;
-        border-radius: 6px;
-        color: inherit;
-        text-decoration: none;
+
+      /* ================= 密码门 ================= */
+      .md-gate-wrap {
+        min-height: calc(100vh - var(--md-nav-h));
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+      }
+      .md-gate-card {
+        width: 380px;
+        max-width: 100%;
+        padding: 32px 32px 28px;
+        background: var(--md-card);
+        border: 1px solid var(--md-border);
+        border-radius: 14px;
+        box-shadow: 0 8px 30px rgba(0, 0, 0, .06);
+        text-align: center;
+      }
+      .md-gate-icon {
+        width: 52px;
+        height: 52px;
+        margin: 0 auto 16px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 14px;
+        background: var(--md-primary-bg);
+        color: var(--md-primary-deep);
+      }
+      .md-gate-icon svg { width: 26px; height: 26px; }
+      .md-gate-title {
+        margin: 0 0 6px;
+        font-size: 18px;
+        font-weight: 700;
+        color: var(--md-title);
+      }
+      .md-gate-sub {
+        margin: 0 0 20px;
+        font-size: 13px;
+        color: var(--md-sub);
+      }
+      .md-gate-form { display: flex; flex-direction: column; gap: 12px; }
+      .md-gate-input {
+        width: 100%;
+        height: 42px;
+        padding: 0 14px;
+        font-size: 14px;
+        color: var(--md-title);
+        background: var(--md-bg2);
+        border: 1px solid var(--md-border);
+        border-radius: 9px;
+        outline: none;
+        transition: border-color .15s ease, box-shadow .15s ease;
+      }
+      .md-gate-input:focus {
+        border-color: var(--md-primary);
+        box-shadow: 0 0 0 3px var(--md-primary-bg);
+      }
+      .md-gate-err {
+        min-height: 16px;
+        font-size: 12px;
+        color: #e11d48;
+      }
+      .md-gate-btn {
+        height: 42px;
+        font-size: 14px;
+        font-weight: 600;
+        color: #fff;
+        background: linear-gradient(135deg, #10b981, #059669);
+        border: none;
+        border-radius: 9px;
+        cursor: pointer;
+        transition: filter .15s ease, transform .12s ease;
+      }
+      .md-gate-btn:hover { filter: brightness(1.05); }
+      .md-gate-btn:active { transform: translateY(1px); }
+      .md-gate-btn:disabled { opacity: .6; cursor: default; }
+
+      /* ================= 顶部导航 ================= */
+      .site-nav {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: var(--md-nav-h);
+        z-index: 80;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 20px;
+        background: var(--md-bg1);
+        border-bottom: 1px solid var(--md-border);
+      }
+      .nav-brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--md-title); }
+      .nav-brand img { width: 30px; height: 30px; border-radius: 8px; object-fit: cover; }
+      .nav-logo-fallback {
+        width: 30px; height: 30px;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 15px; font-weight: 700; color: #fff;
+        background: linear-gradient(135deg, #10b981, #059669);
+        border-radius: 8px;
+      }
+      .nav-title { font-size: 16px; font-weight: 700; letter-spacing: .2px; }
+
+      .nav-stats { display: flex; align-items: center; gap: 8px; }
+      .nav-stat-num { font-variant-numeric: tabular-nums; }
+
+      .nav-stat.nav-stat--view {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        height: 32px;
+        padding: 0 12px;
+        font-size: 13px;
+        color: var(--md-sub);
+        background: linear-gradient(180deg, var(--md-bg1), var(--md-bg2));
+        border: 1px solid var(--md-border);
+        border-radius: 9px;
         white-space: nowrap;
+        cursor: default;
+        user-select: none;
+        transition: color .15s ease, border-color .15s ease;
+      }
+      .nav-stat.nav-stat--view svg { width: 15px; height: 15px; color: #64748b; opacity: .9; transition: color .15s ease; }
+      .nav-stat.nav-stat--view:hover { color: var(--md-body); border-color: #93c5fd; }
+      .nav-stat.nav-stat--view:hover svg { color: #3b82f6; }
+      .nav-stat--view .nav-stat-num { font-weight: 600; }
+
+      .nav-btn.nav-btn--like { gap: 7px; padding: 0 12px; border-radius: 9px; background: linear-gradient(180deg, var(--md-bg1), var(--md-bg2)); }
+      .nav-btn.nav-btn--like svg.heart { width: 15px; height: 15px; color: #94a3b8; fill: transparent; transition: color .18s ease, fill .18s ease, transform .18s ease; }
+      .nav-btn.nav-btn--like:hover { border-color: #fda4af; background: linear-gradient(180deg, #fff1f2, #ffe4e6); }
+      .nav-btn.nav-btn--like:hover svg.heart { color: #f43f5e; transform: scale(1.12); }
+      .nav-btn.nav-btn--like:hover .nav-stat-num { color: #be123c; }
+      .nav-btn.nav-btn--like.is-liked { color: #fff; background: linear-gradient(135deg, #fb7185, #e11d48); border-color: #e11d48; box-shadow: 0 2px 10px rgba(225, 29, 72, .35); }
+      .nav-btn.nav-btn--like.is-liked svg.heart { color: #fff; fill: #fff; }
+      .nav-btn.nav-btn--like.is-liked .nav-stat-num { color: #fff; font-weight: 700; }
+      @keyframes md-heart-beat {
+        0% { transform: scale(1); }
+        30% { transform: scale(1.45); }
+        55% { transform: scale(.92); }
+        75% { transform: scale(1.18); }
+        100% { transform: scale(1); }
+      }
+      .nav-btn.nav-btn--like.popping svg.heart { animation: md-heart-beat .55s ease; }
+      .nav-trails { display: flex; align-items: center; gap: 8px; }
+      .nav-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        height: 32px;
+        padding: 0 12px;
+        font-size: 13px;
+        color: var(--md-sub);
+        background: var(--md-card);
+        border: 1px solid var(--md-border);
+        border-radius: 7px;
+        text-decoration: none;
+        cursor: pointer;
+        transition: color .12s ease, border-color .12s ease, background .12s ease;
+      }
+      .nav-btn:hover { color: var(--md-primary-deep); border-color: var(--md-primary); background: var(--md-primary-bg); }
+      .nav-btn.icon-only { width: 32px; padding: 0; justify-content: center; }
+      .nav-btn svg { width: 16px; height: 16px; }
+      .nav-right { display: flex; align-items: center; gap: 14px; }
+
+      .nav-btn--bm { color: #b45309; border-color: #fcd34d; background: #fffbeb; }
+      .nav-btn--bm:hover { color: #92400e; border-color: #fbbf24; background: #fef3c7; }
+      .nav-btn--sh { color: #2563eb; border-color: #93c5fd; background: #eff6ff; }
+      .nav-btn--sh:hover { color: #1d4ed8; border-color: #60a5fa; background: #dbeafe; }
+
+      figure[data-type="mermaid"] { margin: 12px 0; padding: 12px; background: #ffffff; border: 1px solid var(--md-border); border-radius: 10px; }
+      .cherry-mermaid-source-toolbar { position: relative; z-index: 6; margin-bottom: 6px; }
+      .cherry-mermaid-source-toolbar-switch { position: relative; display: inline-flex; gap: 2px; padding: 3px; background: var(--md-bg2); border: 1px solid var(--md-border); border-radius: 8px; }
+      .cherry-mermaid-source-toolbar-tab { padding: 3px 16px; font-size: 13px; color: var(--md-sub); border-radius: 5px; cursor: pointer; transition: background .15s ease, color .15s ease; }
+      .cherry-mermaid-source-toolbar-tab.active { background: #ffffff; color: var(--md-primary-ink); font-weight: 600; box-shadow: 0 1px 3px rgba(0, 0, 0, .08); }
+      .cherry-mermaid-source-toolbar-slider { display: none; }
+      figure[data-type="mermaid"] .cherry-mermaid-source-toolbar-panel[data-mode="source"] { display: none; }
+      figure[data-type="mermaid"] .cherry-mermaid-source-toolbar-panel[data-mode="preview"] { overflow-x: auto; text-align: center; }
+      figure[data-type="mermaid"] .cherry-mermaid-source-toolbar-panel[data-mode="preview"] svg,
+      figure[data-type="mermaid"] .cherry-mermaid-source-toolbar-panel[data-mode="preview"] .mermaid { max-width: 100%; height: auto; }
+      @media (prefers-color-scheme: dark) {
+        figure[data-type="mermaid"] { background: #1e2b29; }
+        .cherry-mermaid-source-toolbar-tab.active { background: var(--md-card); color: var(--md-title); }
+      }
+
+      /* ================= 三栏布局：撑满视口高度，各栏内部滚动 ================= */
+      .md-read {
+        display: flex;
+        height: calc(100vh - var(--md-nav-h) - var(--md-bottom-h));
+        padding: 8px;
+        gap: 4px;
+        min-width: 0;
+      }
+
+      .md-sb {
+        flex: 0 0 auto;
+        width: 318px;
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
         overflow: hidden;
-        text-overflow: ellipsis;
+        background: var(--md-card);
+        border: 1px solid var(--md-border);
+        border-radius: 8px;
       }
-      .md-tree a:hover, .md-tree a.active {
-        background: var(--md-active, #f3f4f6);
-        color: var(--md-active-color, #2563eb);
-      }
-      .md-kb-title { font-size: 18px; font-weight: 600; margin: 0 0 12px; }
-      .md-article { min-width: 0; }
-      .md-article h1 { font-size: 28px; margin-top: 0; }
-      .md-article .content { line-height: 1.75; }
-      .md-article .content pre {
-        background: #0f172a; color: #e2e8f0; padding: 16px; border-radius: 8px; overflow: auto;
-      }
-      .md-article .content img { max-width: 100%; }
-      .md-article .content table { width: 100%; border-collapse: collapse; }
-      .md-article .content th, .md-article .content td {
-        border: 1px solid var(--md-border, #e5e7eb); padding: 8px;
-      }
-      .md-outline-title { font-weight: 600; margin-bottom: 8px; }
-      .md-outline a { color: inherit; text-decoration: none; display: block; padding: 3px 0; }
-      .md-outline a:hover { color: var(--md-active-color, #2563eb); }
-      .md-empty { color: #9ca3af; padding: 40px 0; text-align: center; }
+      .md-sb-head { flex: 0 0 auto; display: flex; align-items: center; gap: 10px; padding: 12px 14px 10px; border-bottom: 1px solid var(--md-border); }
+      .md-sb-logo { flex: 0 0 auto; width: 36px; height: 36px; border-radius: 9px; overflow: hidden; box-shadow: 0 1px 3px rgba(0, 0, 0, .08); }
+      .md-sb-logo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+      .md-sb-logo-fallback { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 700; color: #fff; background: linear-gradient(135deg, #10b981, #059669); }
+      .md-sb-name { min-width: 0; }
+      .md-sb-name h2 { margin: 0; font-size: 15px; font-weight: 700; color: var(--md-title); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .md-sb-name p { margin: 3px 0 0; font-size: 12px; color: var(--md-sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .md-sb-search { position: relative; flex: 0 0 auto; margin: 10px 12px 4px; }
+      .md-sb-search svg { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); width: 15px; height: 15px; color: var(--md-sub); pointer-events: none; }
+      .md-sb-search input { width: 100%; padding: 7px 10px 7px 32px; border: 1px solid var(--md-border); border-radius: 7px; background: var(--md-bg2); color: var(--md-title); font-size: 13px; outline: none; transition: border-color .15s ease, box-shadow .15s ease; }
+      .md-sb-search input:focus { border-color: var(--md-primary); box-shadow: 0 0 0 3px var(--md-primary-bg); }
+      .md-tree-wrap { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 8px 10px 14px; }
+      .md-tree, .md-tree ul { list-style: none; margin: 0; padding: 0; }
+      .md-tree ul { padding-left: 14px; margin-left: 9px; border-left: 1px solid var(--md-border); }
+      .md-tree li { margin: 1px 0; position: relative; }
+      .md-tree a { display: flex; align-items: center; gap: 7px; padding: 6px 9px; border-radius: 7px; color: var(--md-body); text-decoration: none; font-size: 13px; line-height: 1.4; transition: background .12s ease, color .12s ease; }
+      .md-tree a:hover { background: var(--md-primary-bg); color: var(--md-primary-deep); }
+      .md-tree a.active { background: var(--md-primary-bg); color: var(--md-primary-deep); font-weight: 600; box-shadow: inset 2px 0 0 0 var(--md-primary); }
+      .md-tree-caret { flex: 0 0 auto; width: 16px; height: 16px; display: inline-flex; align-items: center; justify-content: center; color: var(--md-sub); border-radius: 4px; cursor: pointer; transition: transform .18s ease, background .12s ease, color .12s ease; }
+      .md-tree-caret:hover { background: var(--md-primary-bg); color: var(--md-primary-deep); }
+      .md-tree-caret svg { width: 12px; height: 12px; }
+      li.md-fold > a > .md-tree-caret { transform: rotate(-90deg); }
+      li.md-fold > ul { display: none; }
+      li.md-leaf > a { padding-left: 6px; }
+      .md-dot { flex: 0 0 auto; width: 7px; height: 7px; border-radius: 50%; margin-left: 5px; background: var(--md-border); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .04); transition: background .12s ease; }
+      .md-tree a:hover .md-dot, .md-tree a.active .md-dot { background: var(--md-primary); }
+      .md-tree .md-title-text { min-width: 0; flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .md-tree li.md-has-child > a .md-title-text { font-weight: 600; }
+
+      .md-main { flex: 1 1 auto; min-width: 0; overflow-y: auto; background: var(--md-card); border: 1px solid var(--md-border); border-radius: 8px; padding: 18px 26px 26px; }
+      .md-content { margin-top: 2px; font-size: 15px; line-height: 1.8; color: var(--md-body); word-wrap: break-word; }
+      .md-content h1, .md-content h2, .md-content h3, .md-content h4, .md-content h5, .md-content h6 { color: var(--md-title); line-height: 1.35; margin: 1.5em 0 .55em; scroll-margin-top: 14px; }
+      .md-content h1 { font-size: 24px; font-weight: 700; }
+      .md-content h2 { font-size: 20px; font-weight: 700; padding-bottom: 7px; border-bottom: 1px solid var(--md-border); }
+      .md-content h3 { font-size: 16.5px; font-weight: 600; }
+      .md-content p { margin: .85em 0; }
+      .md-content a { color: var(--md-primary-deep); }
+      .md-content ul, .md-content ol { padding-left: 1.4em; }
+      .md-content li { margin: .28em 0; }
+      .md-content strong { color: var(--md-title); }
+      .md-content img { max-width: 100%; border-radius: 8px; }
+      .md-content hr { border: none; border-top: 1px solid var(--md-border); margin: 1.8em 0; }
+      .md-content blockquote { margin: 1em 0; padding: 11px 15px; background: var(--md-primary-bg); border-left: 4px solid var(--md-primary); border-radius: 0 8px 8px 0; color: var(--md-body); }
+      .md-content blockquote > * { margin: .5em 0; }
+      .md-content blockquote > :first-child { margin-top: 0; }
+      .md-content blockquote > :last-child { margin-bottom: 0; }
+      .md-content table { width: 100%; border-collapse: collapse; margin: 1em 0; font-size: 13.5px; }
+      .md-content th, .md-content td { border: 1px solid var(--md-border); padding: 7px 11px; }
+      .md-content th { background: var(--md-bg2); color: var(--md-title); font-weight: 600; }
+      .md-content pre { position: relative; margin: 1em 0; background: var(--md-code-bg); color: var(--md-code-fg); border-radius: 8px; overflow: hidden; box-shadow: 0 4px 16px rgba(15, 23, 42, .18); }
+      .md-content pre code { display: block; padding: 13px 15px; overflow: auto; font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace; font-size: 13px; line-height: 1.65; }
+      .md-lang { position: absolute; top: 8px; right: 38px; font-size: 11px; color: #94a3b8; font-family: inherit; }
+      .md-copy { position: absolute; top: 6px; right: 8px; padding: 3px 8px; font-size: 12px; color: #cbd5e1; background: rgba(255, 255, 255, .08); border: 1px solid rgba(255, 255, 255, .15); border-radius: 5px; cursor: pointer; transition: background .12s ease, color .12s ease; }
+      .md-copy:hover { background: rgba(255, 255, 255, .16); color: #fff; }
+      .md-content pre code .comment, .md-content pre code .token.keyword { color: #93c5fd; }
+      .md-empty { color: var(--md-sub); padding: 60px 0; text-align: center; }
+
+      .md-toc { flex: 0 0 auto; width: 320px; min-width: 0; overflow-y: auto; background: var(--md-card); border: 1px solid var(--md-border); border-radius: 8px; padding: 14px 12px; }
+      .md-toc-title { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--md-sub); margin-bottom: 10px; text-transform: uppercase; letter-spacing: .3px; }
+      .md-toc-title svg { width: 15px; height: 15px; }
+      .md-toc-list { list-style: none; margin: 0; padding: 0; }
+      .md-toc-list ul { list-style: none; margin: 1px 0 2px 10px; padding-left: 12px; border-left: 1px solid var(--md-border); }
+      .md-toc-list li { margin: 1px 0; }
+      .md-toc-item { display: flex; align-items: center; gap: 6px; padding: 4px 8px 4px 5px; border-left: 2px solid transparent; border-radius: 6px; cursor: pointer; transition: background .12s ease, color .12s ease, border-color .12s ease; }
+      .md-toc-item:hover { background: var(--md-bg2); }
+      .md-toc-item.active { background: var(--md-primary-bg); border-left-color: var(--md-primary); }
+      .md-toc-item a { flex: 1 1 auto; min-width: 0; display: block; padding: 1px 0; font-size: 13px; line-height: 1.4; color: var(--md-sub); text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; transition: color .12s ease; }
+      .md-toc-item:hover a { color: var(--md-primary-deep); }
+      .md-toc-item.active a { color: var(--md-primary-deep); font-weight: 600; }
+      .md-toc-caret { flex: 0 0 auto; width: 15px; height: 15px; display: inline-flex; align-items: center; justify-content: center; color: var(--md-sub); transition: transform .18s ease, color .12s ease; }
+      .md-toc-caret svg { width: 11px; height: 11px; }
+      .md-toc-item:hover .md-toc-caret { color: var(--md-primary-deep); }
+      .md-toc-spacer { flex: 0 0 auto; width: 15px; }
+      .md-toc-list li.toc-fold > .md-toc-item > .md-toc-caret { transform: rotate(-90deg); }
+      .md-toc-list li.toc-fold > ul { display: none; }
+
+      .resize-handle { flex: 0 0 5px; align-self: stretch; margin: 0 1px; cursor: col-resize; border-radius: 3px; position: relative; transition: background .15s ease; touch-action: none; }
+      .resize-handle:hover, .resize-handle.dragging { background: var(--md-primary); }
+      .resize-handle::after { content: ''; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 3px; height: 40px; border-radius: 2px; background: var(--md-border); opacity: 0; transition: opacity .15s ease; }
+      .resize-handle:hover::after, .resize-handle.dragging::after { opacity: 1; background: var(--md-primary); }
+
+      .md-bottom { position: fixed; left: 0; right: 0; bottom: 0; height: var(--md-bottom-h); z-index: 70; display: flex; align-items: center; gap: 16px; padding: 0 16px; background: var(--md-bg1); border-top: 1px solid var(--md-border); font-size: 12px; color: var(--md-sub); }
+      .md-bottom-info { display: flex; align-items: center; gap: 14px; min-width: 0; }
+      .md-bottom .md-back-top { margin-left: auto; }
+      .md-bottom-title { color: var(--md-title); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40vw; }
+      .md-bottom-meta { display: flex; align-items: center; gap: 16px; white-space: nowrap; overflow: hidden; }
+      .md-bottom-meta .md-mi { display: inline-flex; align-items: center; gap: 5px; }
+      .md-bottom-meta svg { width: 13px; height: 13px; }
+      .md-bottom-meta .sep { color: var(--md-border); }
+      .md-back-top { padding: 5px 14px; font-size: 12px; color: var(--md-primary-deep); background: var(--md-primary-bg); border: 1px solid transparent; border-radius: 6px; cursor: pointer; transition: background .12s ease, color .12s ease; flex: 0 0 auto; }
+      .md-back-top:hover { background: var(--md-primary); color: #fff; }
+
+      .md-toast { position: fixed; left: 50%; bottom: calc(var(--md-bottom-h) + 18px); transform: translate(-50%, 20px); background: #111827; color: #fff; padding: 8px 16px; font-size: 13px; border-radius: 8px; opacity: 0; pointer-events: none; transition: opacity .2s ease, transform .2s ease; z-index: 999; }
+      .md-toast.show { opacity: 1; transform: translate(-50%, 0); }
+
       @media (max-width: 1024px) {
-        .minidocs-share { grid-template-columns: 1fr; }
-        .md-sidebar, .md-outline { position: static; max-height: none; border: none; }
+        .md-toc { display: none; }
+        .resize-handle.toc-resize { display: none; }
+      }
+      @media (max-width: 860px) {
+        .md-read { height: calc(100vh - var(--md-nav-h)); padding: 0; gap: 0; }
+        .md-sb { display: none; }
+        .resize-handle.sb-resize { display: none; }
+        .md-main { border: none; border-radius: 0; padding: 14px; }
+        .md-bottom { height: auto; min-height: 40px; flex-wrap: wrap; padding: 6px 12px; }
+        .md-bottom-meta { display: none; }
       }
     </style>
   </th:block>
 
   <th:block th:fragment="content">
-    <div class="minidocs-share"
-         th:with="knowledgeBase=${minidocsFinder.getKnowledgeBase(kbSlug)},
-                  docTree=${minidocsFinder.getDocTree(kbSlug)},
-                  docSlug=${docSlug != null ? docSlug : (docTree.isEmpty() ? null : docTree[0].slug)},
-                  doc=${docSlug != null ? minidocsFinder.getDocBySlug(docSlug) : null}">
-      <!-- 左侧：知识库文档树 -->
-      <aside class="md-sidebar">
-        <h2 class="md-kb-title" th:text="${knowledgeBase.spec.displayName}"></h2>
-        <ul class="md-tree">
-          <li th:each="node : ${docTree}" th:replace="~{:: treenode(node=${node})}"></li>
-        </ul>
-      </aside>
-
-      <!-- 中间：文章阅读区 -->
-      <main class="md-article">
-        <div th:if="${doc}" id="md-article-body">
-          <h1 th:text="${doc.spec.title}"></h1>
-          <div class="content" th:utext="${doc.spec.content}"></div>
+    <!-- 密码门：设置了访问密码且当前未通过校验时展示 -->
+    <th:block th:if="${gate}">
+      <nav class="site-nav">
+        <a class="nav-brand" th:href="@{/}">
+          <img th:if="${site.logo != null and !#strings.isEmpty(site.logo)}"
+               th:src="${site.logo}" alt="logo">
+          <span class="nav-logo-fallback"
+                th:unless="${site.logo != null and !#strings.isEmpty(site.logo)}"
+                th:text="${site.title != null and !#strings.isEmpty(site.title) ? #strings.substring(site.title, 0, 1) : '知'}">知</span>
+          <span class="nav-title" th:text="${#strings.defaultString(site.title, '知识库')}">知识库</span>
+        </a>
+      </nav>
+      <div class="md-gate-wrap">
+        <div class="md-gate-card">
+          <div class="md-gate-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+            </svg>
+          </div>
+          <h1 class="md-gate-title">私密知识库分享</h1>
+          <p class="md-gate-sub">该分享链接已设置访问密码，请输入密码后继续查看</p>
+          <form id="md-gate-form" class="md-gate-form" method="get" autocomplete="off">
+            <input id="md-gate-pwd" type="password" name="password" class="md-gate-input"
+                   placeholder="请输入访问密码" autofocus />
+            <div class="md-gate-err" id="md-gate-msg"
+                 th:if="${gateError}">访问密码不正确，请重试</div>
+            <button id="md-gate-btn" type="submit" class="md-gate-btn">进入分享</button>
+          </form>
         </div>
-        <div th:unless="${doc}" class="md-empty">该知识库暂无已发布文档。</div>
-      </main>
-
-      <!-- 右侧：文章大纲（由前端根据阅读区标题生成） -->
-      <aside class="md-outline" id="md-outline">
-        <div class="md-outline-title">大纲</div>
-        <nav id="md-outline-nav"></nav>
-      </aside>
-    </div>
-
-    <!-- 文档树递归片段 -->
-    <th:block th:fragment="treenode(node)">
-      <a href="#"
-         th:attr="data-slug=${node.slug}, data-name=${node.name}"
-         th:text="${node.title}"
-         th:classappend="${(docSlug != null ? docSlug : (doc != null ? doc.spec.slug : '_')) == node.slug} ? ' active' : ''"
-         onclick="event.preventDefault(); location.search = '?docSlug=' + (this.dataset.slug || this.dataset.name);">
-      </a>
-      <ul th:if="${node.children != null and !node.children.isEmpty()}">
-        <li th:each="child : ${node.children}" th:replace="~{:: treenode(node=${child})}"></li>
-      </ul>
+      </div>
     </th:block>
 
-    <script th:inline="javascript">
-      (function () {
-        var body = document.getElementById('md-article-body');
-        var nav = document.getElementById('md-outline-nav');
-        if (!body || !nav) return;
-        var heads = body.querySelectorAll('h1, h2, h3, h4, h5, h6');
-        heads.forEach(function (h, i) {
-          if (!h.id) h.id = 'h-' + i;
-          var a = document.createElement('a');
-          a.href = '#' + h.id;
-          a.textContent = h.textContent;
-          a.style.paddingLeft = ((parseInt(h.tagName.charAt(1)) - 1) * 12) + 'px';
-          nav.appendChild(a);
-        });
-      })();
-    </script>
+    <!-- 完整分享阅读页：与 doc.html 布局一致，仅数据源为分享链路 -->
+    <th:block th:unless="${gate}">
+      <nav class="site-nav">
+        <a class="nav-brand" th:href="@{/}">
+          <img th:if="${site.logo != null and !#strings.isEmpty(site.logo)}"
+               th:src="${site.logo}" alt="logo">
+          <span class="nav-logo-fallback"
+                th:unless="${site.logo != null and !#strings.isEmpty(site.logo)}"
+                th:text="${site.title != null and !#strings.isEmpty(site.title) ? #strings.substring(site.title, 0, 1) : '知'}">知</span>
+          <span class="nav-title" th:text="${#strings.defaultString(site.title, '知识库')}">知识库</span>
+        </a>
+        <div class="nav-right">
+          <div class="nav-trails">
+            <button class="nav-btn icon-only nav-btn--bm" type="button" title="加入浏览器书签" onclick="mdAddBookmark()">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                   stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M6 3h12a1 1 0 0 1 1 1v17l-7-4-7 4V4a1 1 0 0 1 1-1z"></path>
+              </svg>
+            </button>
+            <button class="nav-btn icon-only nav-btn--sh" type="button" title="复制链接" onclick="mdShare(this)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                   stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="18" cy="5" r="3"></circle>
+                <circle cx="6" cy="12" r="3"></circle>
+                <circle cx="18" cy="19" r="3"></circle>
+                <line x1="8.6" y1="13.5" x2="15.4" y2="17.5"></line>
+                <line x1="8.6" y1="10.5" x2="15.4" y2="6.5"></line>
+              </svg>
+            </button>
+          </div>
+          <div class="nav-stats">
+            <button class="nav-btn nav-btn--like" id="md-like" type="button" title="点赞这个知识库">
+              <svg class="heart" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                   stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+              </svg>
+              <span class="nav-stat-num" id="md-like-count">0</span>
+            </button>
+            <span class="nav-stat nav-stat--view" title="访问量">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                   stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                <circle cx="12" cy="12" r="3"></circle>
+              </svg>
+              <span class="nav-stat-num" id="md-view-count">0</span>
+            </span>
+          </div>
+        </div>
+      </nav>
+
+      <div class="md-read"
+           th:with="docSlug=${docSlug != null ? docSlug : (docTree.isEmpty() ? null : docTree[0].slug)}">
+
+        <!-- 左侧：文档树 -->
+        <aside class="md-sb" id="md-sb">
+          <div class="md-sb-head">
+            <span class="md-sb-logo">
+              <img th:if="${knowledgeBase.spec.cover != null and !knowledgeBase.spec.cover.isEmpty()}"
+                   th:src="${knowledgeBase.spec.cover}" alt="知识库图标">
+              <span class="md-sb-logo-fallback"
+                    th:unless="${knowledgeBase.spec.cover != null and !knowledgeBase.spec.cover.isEmpty()}"
+                    th:text="${knowledgeBase.spec.displayName != null and !knowledgeBase.spec.displayName.isEmpty() ? #strings.substring(knowledgeBase.spec.displayName, 0, 1) : '知'}">知</span>
+            </span>
+            <div class="md-sb-name">
+              <h2 th:text="${knowledgeBase.spec.displayName}"></h2>
+              <p>
+                <span th:text="${knowledgeBase.status != null and knowledgeBase.status.docCount != null
+                  ? '共 ' + knowledgeBase.status.docCount + ' 篇' : ''}"></span>
+                <span th:if="${knowledgeBase.spec.updateTime != null}">
+                  · 更新 <span class="md-ts" th:attr="data-ts=${knowledgeBase.spec.updateTime}"
+                              th:text="${knowledgeBase.spec.updateTime}"></span>
+                </span>
+              </p>
+            </div>
+          </div>
+
+          <div class="md-sb-search">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="11" cy="11" r="7"></circle>
+              <line x1="21" y1="21" x2="16.1" y2="16.1"></line>
+            </svg>
+            <input type="search" id="md-doc-search" placeholder="搜索文档..." aria-label="搜索文档">
+          </div>
+
+          <div class="md-tree-wrap">
+            <ul class="md-tree">
+              <th:block th:each="rootNode : ${docTree}">
+                <th:block th:replace="~{:: treenode(node=${rootNode})}"></th:block>
+              </th:block>
+            </ul>
+            <div class="md-empty md-tree-empty" th:if="${docTree.isEmpty()}"
+                 style="display:none">暂无文档。</div>
+          </div>
+        </aside>
+
+        <div class="resize-handle sb-resize" data-resize="sb"></div>
+
+        <!-- 中间：正文 -->
+        <main class="md-main" id="md-main">
+          <div th:if="${doc}">
+            <div class="md-content" id="md-prose" th:utext="${doc.spec.content}"></div>
+          </div>
+          <div th:unless="${doc}" class="md-empty">该知识库暂无已发布文档。</div>
+        </main>
+
+        <div class="resize-handle toc-resize" data-resize="toc"></div>
+
+        <!-- 右侧：文章大纲 -->
+        <nav class="md-toc" id="md-toc">
+          <div class="md-toc-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="8" y1="6" x2="21" y2="6"></line>
+              <line x1="8" y1="12" x2="21" y2="12"></line>
+              <line x1="8" y1="18" x2="21" y2="18"></line>
+              <line x1="3" y1="6" x2="3" y2="6"></line>
+              <line x1="3" y1="12" x2="3" y2="12"></line>
+              <line x1="3" y1="18" x2="3" y2="18"></line>
+            </svg>
+            <span>目录</span>
+          </div>
+          <ul class="md-toc-list" id="md-toc-list"></ul>
+        </nav>
+
+        <!-- 底部：文章信息栏 -->
+        <div class="md-bottom" th:if="${doc}">
+          <div class="md-bottom-info">
+            <span class="md-bottom-title" id="md-route"
+                th:attr="data-root=${knowledgeBase.spec.displayName}"
+                title="文档路由路径">
+              <span th:text="${knowledgeBase.spec.displayName}"></span>
+              <span class="sep">/</span>
+              <span th:text="${doc.spec.title}"></span>
+            </span>
+            <span class="sep"></span>
+            <span><b id="md-words">0</b> 字</span>
+            <span class="sep"></span>
+            <span><b id="md-lines">0</b> 行</span>
+            <span th:if="${doc.spec.author != null and !doc.spec.author.isEmpty()}">
+              <span class="sep"></span>
+              作者 <span th:text="${doc.spec.author}"></span>
+            </span>
+          </div>
+          <div class="md-bottom-meta">
+            <span class="md-mi" th:if="${doc.metadata.creationTimestamp != null}">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                   stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="4" width="18" height="18" rx="2"></rect>
+                <line x1="16" y1="2" x2="16" y2="6"></line>
+                <line x1="8" y1="2" x2="8" y2="6"></line>
+                <line x1="3" y1="10" x2="21" y2="10"></line>
+              </svg>
+              <span class="md-ts" th:attr="data-ts=${doc.metadata.creationTimestamp}"
+                    th:text="${doc.metadata.creationTimestamp}"></span>
+            </span>
+            <span class="md-mi" th:if="${doc.spec.updateTime != null}">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                   stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"></circle>
+                <polyline points="12 6 12 12 16 14"></polyline>
+              </svg>
+              <span class="md-ts" th:attr="data-ts=${doc.spec.updateTime}"
+                    th:text="${doc.spec.updateTime}"></span>
+            </span>
+          </div>
+          <button class="md-back-top" type="button" onclick="mdScrollTop()">回到顶部</button>
+        </div>
+      </div>
+
+      <div class="md-toast" id="md-toast"></div>
+
+      <!-- 文档树递归片段 -->
+      <th:block th:fragment="treenode(node)">
+        <li th:classappend="${node.children != null and !node.children.isEmpty()} ? 'md-has-child' : 'md-leaf'">
+          <a href="#"
+             class="md-tree-link"
+             th:attr="data-slug=${node.slug},
+                      data-name=${node.name},
+                      data-title=${node.title}"
+             th:classappend="${docSlug != null and docSlug == node.slug} ? ' active' : ''"
+             onclick="event.preventDefault(); location.search = '?docSlug=' + (this.dataset.slug || this.dataset.name);">
+            <span class="md-tree-caret" th:if="${node.children != null and !node.children.isEmpty()}"
+                  title="展开 / 收起">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"
+                   stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="6 9 12 15 18 9"></polyline>
+              </svg>
+            </span>
+            <span class="md-dot" th:unless="${node.children != null and !node.children.isEmpty()}"></span>
+            <span class="md-title-text" th:text="${node.title}"></span>
+          </a>
+          <ul th:if="${node.children != null and !node.children.isEmpty()}">
+            <th:block th:each="child : ${node.children}">
+              <th:block th:replace="~{:: treenode(node=${child})}"></th:block>
+            </th:block>
+          </ul>
+        </li>
+      </th:block>
+
+      <script th:inline="javascript">
+        (function () {
+          'use strict';
+
+          // 密码验证成功进入正文后，从地址栏清除密码参数（避免留存在历史记录）
+          (function () {
+            try {
+              var q = new URLSearchParams(location.search);
+              if (q.has('password')) {
+                q.delete('password');
+                var rest = q.toString();
+                history.replaceState(null, '',
+                  location.pathname + (rest ? '?' + rest : '') + location.hash);
+              }
+            } catch (e) {}
+          })();
+
+          // 分享访问量 / 点赞（匿名也可点赞，前端 localStorage 缓存去重，一次性点赞）
+          (function () {
+            var shareToken = /*[[${shareToken}]]*/ '';
+            var likeBtn = document.getElementById('md-like');
+            var likeCountEl = document.getElementById('md-like-count');
+            var viewCountEl = document.getElementById('md-view-count');
+            function api(path) {
+              return '/apis/api.minidocs.halo.run/v1alpha1/share/'
+                + encodeURIComponent(shareToken) + path;
+            }
+            function likeKey() { return 'minidocs:sharelike:' + shareToken; }
+            function locallyLiked() {
+              try { return localStorage.getItem(likeKey()) === '1'; } catch (e) { return false; }
+            }
+            function setLocallyLiked() {
+              try { localStorage.setItem(likeKey(), '1'); } catch (e) {}
+            }
+            function markLiked() {
+              if (!likeBtn) return;
+              likeBtn.classList.add('is-liked');
+              likeBtn.classList.remove('popping');
+              void likeBtn.offsetWidth;
+              likeBtn.classList.add('popping');
+            }
+            if (shareToken) {
+              fetch(api('/stats'), { credentials: 'include' })
+                .then(function (r) { return r.ok ? r.json() : null; })
+                .then(function (data) {
+                  if (!data) return;
+                  if (likeCountEl && typeof data.likeCount === 'number') {
+                    likeCountEl.textContent = data.likeCount;
+                  }
+                  if (viewCountEl && typeof data.accessCount === 'number') {
+                    viewCountEl.textContent = data.accessCount;
+                  }
+                  if (data.liked || locallyLiked()) markLiked();
+                })
+                .catch(function () {});
+            }
+            if (likeBtn && shareToken) {
+              likeBtn.addEventListener('click', function () {
+                if (locallyLiked()) {
+                  toast('该知识库已点赞过了');
+                  markLiked();
+                  return;
+                }
+                fetch(api('/like'), { method: 'POST', credentials: 'include' })
+                  .then(function (r) {
+                    if (!r.ok) throw { failed: true };
+                    return r.json();
+                  })
+                  .then(function (data) {
+                    setLocallyLiked();
+                    if (likeCountEl && data && typeof data.likeCount === 'number') {
+                      likeCountEl.textContent = data.likeCount;
+                    }
+                    markLiked();
+                    toast('点赞成功');
+                  })
+                  .catch(function () { toast('点赞失败，请稍后重试'); });
+              });
+            }
+          })();
+
+          function toast(msg) {
+            var t = document.getElementById('md-toast');
+            if (!t) return;
+            t.textContent = msg;
+            t.classList.add('show');
+            clearTimeout(t._timer);
+            t._timer = setTimeout(function () { t.classList.remove('show'); }, 1600);
+          }
+
+          var mainEl = document.getElementById('md-main');
+          window.mdScrollTop = function () {
+            if (mainEl) mainEl.scrollTo({ top: 0, behavior: 'smooth' });
+          };
+
+          var search = document.getElementById('md-doc-search');
+          if (search) {
+            search.addEventListener('input', function () {
+              var q = search.value.trim().toLowerCase();
+              var links = document.querySelectorAll('.md-tree-link');
+              Array.prototype.forEach.call(links, function (a) {
+                var rel = a.parentElement;
+                var hay = (a.dataset.title || '').toLowerCase();
+                rel.style.display = hay.indexOf(q) !== -1 ? '' : 'none';
+              });
+              var empty = document.querySelector('.md-tree-empty');
+              if (empty) {
+                empty.style.display = q && !Array.prototype.some.call(links, function (a) {
+                  return a.parentElement.style.display !== 'none';
+                }) ? '' : 'none';
+              }
+            });
+          }
+
+          var treeRoot = document.querySelector('.md-tree');
+          if (treeRoot) {
+            treeRoot.addEventListener('click', function (e) {
+              var caret = e.target && e.target.closest
+                ? e.target.closest('.md-tree-caret')
+                : null;
+              if (!caret) return;
+              e.preventDefault();
+              e.stopPropagation();
+              var li = caret.closest('li.md-has-child');
+              if (li) li.classList.toggle('md-fold');
+            }, true);
+          }
+
+          var prose = document.getElementById('md-prose');
+          if (prose) {
+            try { enhanceProse(); } catch (e) {}
+            try { enableCherryMermaidTabs(); } catch (e) {}
+            fillBottomMeta();
+          }
+          formatTimes();
+
+          function formatDateTime(iso) {
+            if (!iso) return '';
+            var d = new Date(iso);
+            if (isNaN(d.getTime())) return iso;
+            function p(n) { return (n < 10 ? '0' : '') + n; }
+            return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate())
+              + ' ' + p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
+          }
+          function formatTimes() {
+            var els = document.querySelectorAll('.md-ts[data-ts]');
+            Array.prototype.forEach.call(els, function (el) {
+              el.textContent = formatDateTime(el.getAttribute('data-ts'));
+            });
+          }
+
+          function fillBottomMeta() {
+            var wEl = document.getElementById('md-words');
+            var lEl = document.getElementById('md-lines');
+            if (!wEl && !lEl) return;
+            var text = prose ? (prose.innerText || '') : '';
+            var words = text.replace(/\s+/g, '').length;
+            var lines = text ? text.split(/\n/).length : 0;
+            if (wEl) wEl.textContent = words;
+            if (lEl) lEl.textContent = lines;
+          }
+
+          function enhanceProse() {
+            var pres = prose.querySelectorAll('pre');
+            Array.prototype.forEach.call(pres, function (pre) {
+              if (pre.closest('.cherry-mermaid-source-toolbar-panel')) return;
+              pre.style.position = 'relative';
+              var code = pre.querySelector('code');
+              if (code) {
+                var langEl = code.className.match(/language-([\w-]+)/);
+                if (langEl) {
+                  var s = document.createElement('span');
+                  s.className = 'md-lang';
+                  s.textContent = langEl[1];
+                  pre.appendChild(s);
+                }
+              }
+              var btn = document.createElement('button');
+              btn.className = 'md-copy';
+              btn.type = 'button';
+              btn.textContent = '复制';
+              btn.addEventListener('click', function (e) {
+                e.preventDefault();
+                var txt = pre.innerText.replace(/\n{3,}/g, '\n\n');
+                copyText(txt);
+                toast('已复制');
+              });
+              pre.appendChild(btn);
+            });
+
+            var tocList = document.getElementById('md-toc-list');
+            var cache = {};
+            function slideId(text) {
+              var s = String(text || '').trim().toLowerCase()
+                .replace(/\s+/g, '-').replace(/[^\w\u4e00-\u9fa5-]/g, '');
+              if (cache[s] != null) { cache[s] += 1; return s + '-' + cache[s]; }
+              cache[s] = 0; return s;
+            }
+            var heads = prose.querySelectorAll('h1,h2,h3,h4,h5,h6');
+            var tree = [];
+            var stack = [];
+            Array.prototype.forEach.call(heads, function (h) {
+              h.id = h.id || slideId(h.textContent);
+              var lvl = parseInt(h.tagName.charAt(1), 10);
+              var item = { lvl: lvl, id: h.id, text: h.textContent };
+              while (stack.length && stack[stack.length - 1].lvl >= lvl) stack.pop();
+              if (stack.length) {
+                (stack[stack.length - 1].children = stack[stack.length - 1].children || [])
+                  .push(item);
+              } else { tree.push(item); }
+              stack.push(item);
+            });
+            (function build(items, parentList) {
+              items.forEach(function (it) {
+                var li = document.createElement('li');
+                var hasKids = it.children && it.children.length;
+                var item = document.createElement('div');
+                item.className = 'md-toc-item';
+                if (hasKids) {
+                  var caret = document.createElement('span');
+                  caret.className = 'md-toc-caret';
+                  caret.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+                    + 'stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">'
+                    + '<polyline points="6 9 12 15 18 9"></polyline></svg>';
+                  item.appendChild(caret);
+                } else {
+                  var spacer = document.createElement('span');
+                  spacer.className = 'md-toc-spacer';
+                  item.appendChild(spacer);
+                }
+                var link = document.createElement('a');
+                link.href = '#' + it.id;
+                link.textContent = it.text;
+                link.addEventListener('click', function (e) {
+                  e.preventDefault();
+                  var t = document.getElementById(it.id);
+                  if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                  history.replaceState(null, '', location.pathname + location.search + '#' + it.id);
+                });
+                item.appendChild(link);
+                item.addEventListener('click', function (e) {
+                  if (e.target.closest && e.target.closest('a')) return;
+                  if (li.querySelector(':scope > ul')) li.classList.toggle('toc-fold');
+                });
+                li.appendChild(item);
+                parentList.appendChild(li);
+                if (hasKids) {
+                  li.classList.add('toc-fold');
+                  var childUl = document.createElement('ul');
+                  li.appendChild(childUl);
+                  build(it.children, childUl);
+                }
+              });
+            })(tree, tocList);
+            var tocRoot = document.getElementById('md-toc');
+            if (tocList.children.length === 0 && tocRoot) tocRoot.style.display = 'none';
+
+            var tocItems = tocList.querySelectorAll('.md-toc-item');
+            function onScroll() {
+              if (!heads.length) return;
+              var cur = null;
+              var topBias = mainEl ? mainEl.getBoundingClientRect().top + 12 : 80;
+              Array.prototype.forEach.call(heads, function (h) {
+                if (h.getBoundingClientRect().top <= topBias) cur = h;
+              });
+              var activeId = '#' + (cur ? cur.id : '');
+              Array.prototype.forEach.call(tocItems, function (item) {
+                var a = item.querySelector('a');
+                item.classList.toggle('active', !!a && a.getAttribute('href') === activeId);
+              });
+              var activeItem = tocList.querySelector('.md-toc-item.active');
+              if (activeItem) {
+                var liEl = activeItem.parentElement;
+                while (liEl) {
+                  var pLi = liEl.parentElement ? liEl.parentElement.closest('li') : null;
+                  if (!pLi) break;
+                  pLi.classList.remove('toc-fold');
+                  liEl = pLi;
+                }
+              }
+            }
+            if (mainEl) mainEl.addEventListener('scroll', onScroll, { passive: true });
+            window.addEventListener('scroll', onScroll, { passive: true });
+            onScroll();
+
+            function renderRoute() {
+              var el = document.getElementById('md-route');
+              if (!el) return;
+              var activeA = document.querySelector('.md-tree-link.active');
+              var parts = [];
+              if (activeA) {
+                (function walk(a) {
+                  parts.unshift(a.getAttribute('data-title') || '');
+                  var li = a.closest('li');
+                  var pLi = li && li.parentElement ? li.parentElement.closest('li') : null;
+                  if (pLi) {
+                    var pa = pLi.querySelector(':scope > a');
+                    if (pa) walk(pa);
+                  }
+                })(activeA);
+              }
+              var root = el.getAttribute('data-root') || '';
+              var chain = [root].concat(parts).filter(function (s) { return s; });
+              el.textContent = '';
+              chain.forEach(function (s, i) {
+                if (i > 0) {
+                  var sep = document.createElement('span');
+                  sep.className = 'sep';
+                  sep.textContent = '/';
+                  el.appendChild(sep);
+                }
+                var span = document.createElement('span');
+                span.textContent = s;
+                el.appendChild(span);
+              });
+              el.setAttribute('title', chain.join(' / '));
+            }
+            renderRoute();
+          }
+
+          function enableCherryMermaidTabs() {
+            prose.addEventListener('click', function (e) {
+              var tab = e.target && e.target.closest
+                ? e.target.closest('.cherry-mermaid-source-toolbar-tab[data-mode]')
+                : null;
+              if (!tab) return;
+              var fig = tab.closest('figure');
+              if (!fig) return;
+              var mode = tab.getAttribute('data-mode');
+              fig.querySelectorAll('.cherry-mermaid-source-toolbar-tab').forEach(function (t) {
+                t.classList.toggle('active', t === tab);
+              });
+              fig.querySelectorAll('.cherry-mermaid-source-toolbar-panel').forEach(function (p) {
+                var on = p.getAttribute('data-mode') === mode;
+                p.classList.toggle('active', on);
+                p.style.display = on ? 'block' : 'none';
+              });
+            });
+          }
+
+          function initResizer(handle, target, dir, min, max) {
+            handle.addEventListener('mousedown', function (e) {
+              e.preventDefault();
+              handle.classList.add('dragging');
+              document.body.style.cursor = 'col-resize';
+              document.body.style.userSelect = 'none';
+              var startX = e.clientX;
+              var startW = target.offsetWidth;
+              function move(ev) {
+                var delta = dir === 'left' ? (ev.clientX - startX) : (startX - ev.clientX);
+                var w = startW + delta;
+                if (w < min) w = min;
+                if (w > max) w = max;
+                target.style.width = w + 'px';
+              }
+              function up() {
+                document.removeEventListener('mousemove', move);
+                document.removeEventListener('mouseup', up);
+                handle.classList.remove('dragging');
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
+              }
+              document.addEventListener('mousemove', move);
+              document.addEventListener('mouseup', up);
+            });
+          }
+
+          var sbHandle = document.querySelector('.resize-handle.sb-resize');
+          var sbEl = document.getElementById('md-sb');
+          if (sbHandle && sbEl) {
+            initResizer(sbHandle, sbEl, 'left', 200, 520);
+          }
+          var tocHandle = document.querySelector('.resize-handle.toc-resize');
+          var tocEl = document.getElementById('md-toc');
+          if (tocHandle && tocEl) {
+            initResizer(tocHandle, tocEl, 'right', 170, 480);
+          }
+
+          function copyText(text) {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+              return navigator.clipboard.writeText(text).catch(function () { fallbackCopy(text); });
+            }
+            fallbackCopy(text);
+          }
+          function fallbackCopy(text) {
+            var ta = document.createElement('textarea');
+            ta.value = text;
+            ta.style.position = 'fixed';
+            ta.style.opacity = '0';
+            document.body.appendChild(ta);
+            ta.select();
+            try { document.execCommand('copy'); } catch (e) {}
+            document.body.removeChild(ta);
+          }
+
+          window.mdShare = function (btn) {
+            copyText(location.href);
+            toast('链接已复制');
+          };
+
+          window.mdAddBookmark = function () {
+            var url = location.href;
+            var title = window.document.title || '知识库';
+            if (window.external && typeof window.external.AddFavorite === 'function') {
+              try { window.external.AddFavorite(url, title); toast('已添加到浏览器书签'); return; } catch (e) { }
+            }
+            if (window.sidebar && window.sidebar.addPanel) {
+              window.sidebar.addPanel(title, url, '');
+              return;
+            }
+            var mac = navigator.platform && navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+            toast('当前浏览器不支持自动添加，请按 ' + (mac ? '⌘D' : 'Ctrl+D') + ' 将本页加入浏览器书签');
+          };
+        })();
+      </script>
+    </th:block>
   </th:block>
 </html>

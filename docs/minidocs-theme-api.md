@@ -8,11 +8,13 @@ MiniDocs 内置了一组前台主题模板路由（由 `KnowledgeBaseRouter` 以
 
 | 路由 | 渲染模板 | 说明 |
 | --- | --- | --- |
-| `/docs` | `docs.html` | 文档列表页（模板通过 `minidocsFinder` 自取公开知识库与文档） |
+| `/docs` | `docs.html` | 文档列表页（模板通过 `minidocsFinder` 自取当前用户可见的知识库与文档） |
 | `/docs/view/{kbSlug}` | `doc.html` | 知识库阅读页；`kbSlug` 支持知识库 `metadata.name` 或 `spec.slug` |
-| `/docs/share/{kbSlug}` | `doc_share.html` | 知识库分享页（左侧文档树、中间阅读区、右侧大纲）；可选 `?docSlug=` 直接定位文档 |
+| `/docs/share/{shareToken}` | `doc_share.html` | 知识库外链分享页（左侧文档树、中间阅读区、右侧大纲）；可选 `?docSlug=` 直接定位文档 |
 
-> 服务端仅做公开性校验，不向模板塞业务数据；知识库 / 文档树 / 文档数据由模板通过 `minidocsFinder` 自行查询。非公开知识库访问返回 `404`。
+> **阅读页 / 列表页**走常规授权大门：服务端仅在路由入口做访问授权（按当前登录态校验公开 / 私有库与匿名开关），不向模板塞业务数据；知识库 / 文档树 / 文档数据由模板通过 `minidocsFinder` 自行查询（Finder 内部再做资源级可见性二次校验）。当前访问者不可访问的知识库返回 `404`。
+>
+> **分享页不走常规权限**：只要持有有效外链（`shareToken`），即便是不公开的私有知识库也无需登录即可查看，仅受分享自身的「开启状态、有效期、访问密码」约束。分享页由服务端直接渲染数据，模板可用的模型变量：`shareToken`（外链标识）、`knowledgeBase`（知识库）、`docTree`（已发布文档树）、`docSlug`（当前文档 slug）、`doc`（当前文档）、`gate`（是否密码门页）。设置了访问密码（`spec.sharePassword`）且访客未通过验证时，仅渲染密码门；密码经 GET 查询参数 `?password=` 提交，验证通过后服务端下发 HttpOnly 访问 cookie，后续访问免密。分享已关闭 / 过期 / token 无效时返回 `404`。
 
 若主题希望自定义页面结构，也可不依赖内置路由，自行在 Halo 后台创建页面并选择主题自定义模板，用页面 slug 或主题设置传入知识库 `name` / `slug`，再在模板中通过 `minidocsFinder` 取数渲染。`minidocsFinder` 还可用于任意主题模板位置（如全局侧边栏 / 页脚），渲染「全站知识库入口」或「文档页脚导航」。
 
@@ -22,13 +24,24 @@ MiniDocs 内置了一组前台主题模板路由（由 `KnowledgeBaseRouter` 以
 
 ### minidocsFinder
 
-`minidocsFinder` 对应当前实现中的 `@Finder("minidocsFinder")`，用于查询公开知识库及其已发布文档。返回类型为 `reactor.core.publisher.Mono<T>`，Halo 模板引擎会自动订阅并解包，在模板中直接作为普通对象 / 集合使用即可，无需（也不能）手动 `block()`。
+`minidocsFinder` 对应当前实现中的 `@Finder("minidocsFinder")`，用于查询**当前访问者可见**的知识库及其已发布文档（未登录仅公开库，登录含自己创建 / 是成员的私有库）。返回类型为 `reactor.core.publisher.Mono<T>`，Halo 模板引擎会自动订阅并解包，在模板中直接作为普通对象 / 集合使用即可，无需（也不能）手动 `block()`。
 
-所有方法仅返回 `publicVisible=true` 的知识库与 `phase=published` 的文档；当插件设置关闭「允许未登录用户阅读」且用户未登录时，访问会触发 `403`，与公共 REST API 一致。
+> Finder 走常规可见性边界，**不包含外链分享链路**：私有知识库即使开启了分享，也不会通过 Finder 对外链访客可见——分享内容只能经 `/docs/share/{shareToken}` 路由或 `api.minidocs.halo.run` 的 `/share/*` 端点访问。
+
+方法返回内容随**当前访问者**的权限而定，与公共 REST API 的可见性边界保持一致：
+
+- **未登录用户**：仅能访问 `publicVisible=true` 的公开知识库及其 `phase=published` 文档；且当插件设置关闭「允许未登录用户阅读」时，匿名请求返回 `403`（或空）。
+- **已登录用户**：除公开知识库外，还能访问**自己创建、或写入 `spec.members`（成员）、或具备知识库管理权限**的私有知识库；文档一律仅暴露 `phase=published`。
+- 任何情况下，私有知识库只对本库创建者 / 成员 / 管理者可见，其余用户一律不可见（详情 / 文档返回空，列表不出现）。
+
+> 主题渲染上下文中，Finder 通过当前安全上下文识别登录用户：已登录成员在主题列表即可看到自己参与的私有库；未登录仅见公开库。
 
 #### minidocsFinder.listKnowledgeBases(page, size)
 
-分页列出公开知识库。
+分页列出**当前访问者**可访问的知识库（按最近更新倒序）：
+
+- **已登录用户**：公开知识库 + 自己创建 / 是成员（或具备管理权限）的私有知识库。
+- **未登录用户**：仅公开知识库（受 `allowAnonymousRead` 设置约束）。
 
 **参数**：
 
@@ -52,7 +65,7 @@ MiniDocs 内置了一组前台主题模板路由（由 `KnowledgeBaseRouter` 以
 
 #### minidocsFinder.getKnowledgeBase(kbSlug)
 
-获取单个公开知识库详情；非公开知识库返回空。
+获取单个知识库详情；当前访问者不可访问（非公开，且非该库创建者 / 成员 / 管理者）时返回空。
 
 **参数**：
 
@@ -96,7 +109,7 @@ MiniDocs 内置了一组前台主题模板路由（由 `KnowledgeBaseRouter` 以
 </ul>
 ```
 
-#### minidocsFinder.getDoc(kbSlug, docSlug)
+#### minidocsFinder.getDocBySlug(kbSlug, docSlug)
 
 获取单篇已发布文档（按文档 `spec.slug` 取，并校验归属该知识库）。
 
@@ -112,7 +125,7 @@ MiniDocs 内置了一组前台主题模板路由（由 `KnowledgeBaseRouter` 以
 **示例**：
 
 ```html
-<div th:with="doc = ${minidocsFinder.getDoc(kbSlug, docSlug)}" th:if="${doc != null}">
+<div th:with="doc = ${minidocsFinder.getDocBySlug(kbSlug, docSlug)}" th:if="${doc != null}">
   <h1 th:text="${doc.spec.title}"></h1>
 </div>
 ```
@@ -154,7 +167,7 @@ MiniDocs 内置了一组前台主题模板路由（由 `KnowledgeBaseRouter` 以
 
 #### minidocsFinder.getDocBySlug(docSlug)
 
-按文档 `slug` 查询已发布文档（所属知识库须公开）。适合「`/docs/view/{kbSlug}?docSlug={docSlug}`」这类可读 URL 的详情页。
+按文档 `slug` 查询已发布文档（所属知识库须对当前访问者可见）。适合「`/docs/view/{kbSlug}?docSlug={docSlug}`」这类可读 URL 的详情页。
 
 **参数**：
 
@@ -175,11 +188,11 @@ MiniDocs 内置了一组前台主题模板路由（由 `KnowledgeBaseRouter` 以
 
 > `docSlug` 变量由你的主题通过「页面 slug 约定」或「主题设置」传入模板（与内置路由 `/docs/view/{kbSlug}?docSlug=` 中的 `docSlug` 一致）。文档 `spec.raw` 为**原始 Markdown 文本**，需主题自行渲染（参考下方「Markdown 渲染」）。若希望直接输出已渲染 HTML，可直接使用文档的 `spec.content` 字段（编辑时由前端 Markdown 编辑器生成的 HTML）。
 
-> 取单篇文档有两种方式：
-> - `getDoc(kbSlug, docSlug)`：按文档的 `spec.slug` 取（URL 友好，并校验归属该知识库）。
-> - `getDocBySlug(docSlug)`：按文档的 `spec.slug` 取（URL 友好，推荐在前台链接 / 详情页中使用）。
+> 取单篇文档有两个**同名重载**：
+> - `getDocBySlug(kbSlug, docSlug)`：限定知识库取文档（并校验归属该知识库）。
+> - `getDocBySlug(docSlug)`：按文档 slug 全局取（适合详情页只带一个 slug 的场景）。
 >
-> 两者均要求所属知识库 `publicVisible=true` 且文档 `phase=published`，统一使用 slug 字段查询。
+> 两者均要求所属知识库对**当前访问者可见**（公开库，或当前用户为成员 / 创建者 / 管理者的私有库）且文档 `phase=published`；不可见时返回空，统一使用 slug 字段查询。
 
 ## Markdown 渲染
 
@@ -223,7 +236,7 @@ public class MarkdownRender {
 
 ## 公共 REST API
 
-如果主题使用前端框架进行客户端渲染，可以直接调用匿名公共 API（如文档树、按 slug 获取文档）。端点列表与匿名访问规则请参考 [REST API 文档](./minidocs-rest-api.md)。
+如果主题使用前端框架进行客户端渲染，可以直接调用匿名公共 API（如文档树、按 slug 获取文档、统计与点赞、外链分享内容）。端点列表与匿名访问规则请参考 [REST API 文档](./minidocs-rest-api.md)。
 
 ## 类型定义
 
@@ -238,15 +251,22 @@ public class MarkdownRender {
   "spec": {
     "displayName": "产品手册",
     "description": "公司内部产品文档",
-    "logo": "https://example.com/logo.png",
     "publicVisible": true,
     "members": ["alice", "bob"],
     "tags": ["产品", "对外"],
     "priority": 0,
     "creatorName": "admin",
+    "logo": "https://example.com/logo.png",
     "cover": "https://example.com/cover.png",
     "creationTime": "2026-08-01T10:00:00Z",
-    "updateTime": "2026-08-20T09:00:00Z"
+    "updateTime": "2026-08-20T09:00:00Z",
+    "accessCount": 8,
+    "likeCount": 1,
+    "likedUsers": ["admin"],
+    "shareEnabled": true,
+    "shareToken": "a1B2c3D4e5F6",
+    "sharePassword": "",
+    "shareExpiresAt": null
   },
   "status": {
     "docCount": 32,
@@ -257,7 +277,13 @@ public class MarkdownRender {
 }
 ```
 
-`status` 为观测状态，由插件异步维护，仅供参考。公开接口仅返回 `publicVisible=true` 的知识库；Finder 同样遵循此规则，非公开知识库 `getKnowledgeBase` 返回空。
+`status` 为观测状态，由插件异步维护，仅供参考。公开接口仅返回 `publicVisible=true` 的知识库；Finder 返回**当前访问者可访问**的知识库（未登录仅公开，登录含其创建 / 作为成员的私有库）；不可访问时 `getKnowledgeBase` 返回空。
+
+`spec` 补充说明：
+
+- `logo` / `cover`：知识库图标与封面图片地址。
+- `accessCount` / `likeCount` / `likedUsers`：访问量、点赞数与已点赞用户名列表（系统维护）。
+- `shareEnabled` / `shareToken` / `sharePassword` / `shareExpiresAt`：外链分享设置。开启分享后外链为 `/docs/share/{shareToken}`；`sharePassword` 为空表示无密码访问，`shareExpiresAt` 为空表示永久有效。**注意：主题模板中请勿直接输出 `sharePassword`**；对外渲染分享入口时使用 `/docs/share/{shareToken}` 链接即可。
 
 ### KnowledgeBaseDoc
 
@@ -337,9 +363,9 @@ public class MarkdownRender {
 
 ## 注意事项
 
-1. **变量名固定**：模板中必须使用 `${minidocsFinder}`，对应插件 `@Finder("minidocsFinder")`，不要猜测其他名字。插件已内置 `/docs`、`/docs/view/{kbSlug}`、`/docs/share/{kbSlug}` 路由与默认模板，主题可用同名模板覆盖，或通过 Finder 自行在任意位置取数渲染。
-2. **仅公开数据**：Finder 只返回 `publicVisible=true` 的知识库与 `phase=published` 的文档，与公共 REST 接口一致；私有内容需登录后走 Console API / 标准 CRUD（需「知识库管理」角色）。
+1. **变量名固定**：模板中必须使用 `${minidocsFinder}`，对应插件 `@Finder("minidocsFinder")`，不要猜测其他名字。插件已内置 `/docs`、`/docs/view/{kbSlug}`、`/docs/share/{shareToken}` 路由与默认模板，主题可用同名模板覆盖，或通过 Finder 自行在任意位置取数渲染。
+2. **可见性边界**：Finder 只返回当前访问者**可访问**的内容——未登录仅公开库、登录用户含自己创建 / 是成员（或具备管理权限）的私有库；所有文档仅 `phase=published`。私有库始终只对创建者 / 成员 / 管理者可见，非授权访问在详情 / 文档接口返回空、在列表不出现。外链分享是独立通道，不经 Finder（见路由说明）。
 3. **匿名开关**：`allowAnonymousRead=false` 时匿名访问返回 `403`；若公开页面向游客开放，提醒站点管理员开启该设置（插件设置 → 基础设置）。
-4. **空值保护**：`getKnowledgeBase` / `getDoc` / `getDocBySlug` 在非公开、不存在时返回空，模板中务必用 `th:if="${xxx != null}"` 判断后再渲染，避免异常。
-5. **排序**：知识库与文档均按 `spec.priority` 升序返回，文档树亦同。
-6. **不要在 Finder 调用里做写操作**：Finder 仅用于读取展示；创建 / 编辑 / 发布等写操作请使用 Console API 或标准 CRUD 端点（需认证与相应角色）。
+4. **空值保护**：`getKnowledgeBase` / `getDocBySlug` 在**当前访问者不可访问**或资源不存在时返回空，模板中务必用 `th:if="${xxx != null}"` 判断后再渲染，避免异常。
+5. **排序**：知识库与文档按 `spec.priority` 升序返回，文档树亦同；`listKnowledgeBases`（当前用户可访问列表）按最近更新 `spec.updateTime` 倒序。
+6. **不要在 Finder 调用里做写操作**：Finder 仅用于读取展示；创建 / 编辑 / 发布等写操作请使用 Console API 或标准 CRUD 端点（需认证与相应角色）。公开页的点赞 / 访问量统计请走公共 API 的 `stats` / `like` / `share/*` 端点（详见 REST API 文档）。

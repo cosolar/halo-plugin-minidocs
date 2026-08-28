@@ -1,4 +1,4 @@
-package run.halo.plugin.minidocs.endpoint;
+package cn.minims.minidocs.endpoint;
 
 import java.nio.charset.StandardCharsets;
 import java.security.Principal;
@@ -22,8 +22,9 @@ import org.springframework.web.reactive.function.server.ServerResponse;
 import reactor.core.publisher.Mono;
 import run.halo.app.core.extension.endpoint.CustomEndpoint;
 import run.halo.app.extension.GroupVersion;
-import run.halo.plugin.minidocs.extension.KnowledgeBaseDoc;
-import run.halo.plugin.minidocs.service.KnowledgeBaseDocService;
+import cn.minims.minidocs.extension.KnowledgeBaseDoc;
+import cn.minims.minidocs.service.KnowledgeBaseDocService;
+import cn.minims.minidocs.service.KnowledgeBaseService;
 
 import static org.springframework.web.reactive.function.server.RequestPredicates.accept;
 import static org.springframework.web.reactive.function.server.RouterFunctions.route;
@@ -40,6 +41,7 @@ import static org.springframework.web.reactive.function.server.RouterFunctions.r
 public class KnowledgeBaseDocConsoleEndpoint implements CustomEndpoint {
 
     private final KnowledgeBaseDocService docService;
+    private final KnowledgeBaseService knowledgeBaseService;
 
     @Override
     public RouterFunction<ServerResponse> endpoint() {
@@ -54,6 +56,7 @@ public class KnowledgeBaseDocConsoleEndpoint implements CustomEndpoint {
             .DELETE("/knowledgebases/{name}/docs/{docName}", this::deleteDoc)
             .POST("/knowledgebases/{name}/docs/import", this::importDocs)
             .POST("/knowledgebases/{name}/docs/{docName}/publish", this::publishDoc)
+            .POST("/knowledgebases/{name}/docs/{docName}/unpublish", this::unpublishDoc)
             .POST("/knowledgebases/{name}/docs/{docName}/move", accept(MediaType.APPLICATION_JSON),
                 this::moveDoc)
             .GET("/knowledgebases/{name}/docs/{docName}/export", this::exportDoc)
@@ -62,33 +65,39 @@ public class KnowledgeBaseDocConsoleEndpoint implements CustomEndpoint {
 
     private Mono<ServerResponse> listDocs(ServerRequest request) {
         var kbName = request.pathVariable("name");
-        var keyword = request.queryParam("keyword").orElse(null);
-        var phase = request.queryParam("phase").orElse(null);
-        var page = request.queryParam("page").map(Integer::parseInt).orElse(1);
-        var size = request.queryParam("size").map(Integer::parseInt).orElse(20);
-        return docService.list(kbName, keyword, phase, page, size)
-            .flatMap(result -> ServerResponse.ok().bodyValue(result));
+        return knowledgeBaseService.requireAccessByName(kbName)
+            .then(Mono.defer(() -> {
+                var keyword = request.queryParam("keyword").orElse(null);
+                var phase = request.queryParam("phase").orElse(null);
+                var page = request.queryParam("page").map(Integer::parseInt).orElse(1);
+                var size = request.queryParam("size").map(Integer::parseInt).orElse(20);
+                return docService.list(kbName, keyword, phase, page, size)
+                    .flatMap(result -> ServerResponse.ok().bodyValue(result));
+            }));
     }
 
     private Mono<ServerResponse> getDocTree(ServerRequest request) {
         var kbName = request.pathVariable("name");
-        return docService.buildTree(kbName, null)
-            .flatMap(tree -> ServerResponse.ok().bodyValue(tree));
+        return knowledgeBaseService.requireAccessByName(kbName)
+            .then(docService.buildTree(kbName, null)
+                .flatMap(tree -> ServerResponse.ok().bodyValue(tree)));
     }
 
     private Mono<ServerResponse> getDoc(ServerRequest request) {
         var kbName = request.pathVariable("name");
         var docName = request.pathVariable("docName");
-        return docService.get(kbName, docName)
-            .flatMap(doc -> ServerResponse.ok().bodyValue(doc));
+        return knowledgeBaseService.requireAccessByName(kbName)
+            .then(docService.get(kbName, docName)
+                .flatMap(doc -> ServerResponse.ok().bodyValue(doc)));
     }
 
     private Mono<ServerResponse> createDoc(ServerRequest request) {
         var kbName = request.pathVariable("name");
         var author = currentUsername(request);
-        return request.bodyToMono(KnowledgeBaseDoc.class)
-            .flatMap(doc -> author.flatMap(name -> docService.create(kbName, doc, name)))
-            .flatMap(doc -> ServerResponse.ok().bodyValue(doc));
+        return knowledgeBaseService.requireAccessByName(kbName)
+            .then(request.bodyToMono(KnowledgeBaseDoc.class)
+                .flatMap(doc -> author.flatMap(name -> docService.create(kbName, doc, name)))
+                .flatMap(doc -> ServerResponse.ok().bodyValue(doc)));
     }
 
     /**
@@ -104,16 +113,18 @@ public class KnowledgeBaseDocConsoleEndpoint implements CustomEndpoint {
     private Mono<ServerResponse> updateDoc(ServerRequest request) {
         var kbName = request.pathVariable("name");
         var docName = request.pathVariable("docName");
-        return request.bodyToMono(KnowledgeBaseDoc.class)
-            .flatMap(update -> docService.update(kbName, docName, update))
-            .flatMap(doc -> ServerResponse.ok().bodyValue(doc));
+        return knowledgeBaseService.requireAccessByName(kbName)
+            .then(request.bodyToMono(KnowledgeBaseDoc.class)
+                .flatMap(update -> docService.update(kbName, docName, update))
+                .flatMap(doc -> ServerResponse.ok().bodyValue(doc)));
     }
 
     private Mono<ServerResponse> deleteDoc(ServerRequest request) {
         var kbName = request.pathVariable("name");
         var docName = request.pathVariable("docName");
-        return docService.delete(kbName, docName)
-            .then(ServerResponse.ok().build());
+        return knowledgeBaseService.requireAccessByName(kbName)
+            .then(docService.delete(kbName, docName)
+                .then(ServerResponse.ok().build()));
     }
 
     /**
@@ -124,20 +135,21 @@ public class KnowledgeBaseDocConsoleEndpoint implements CustomEndpoint {
      */
     private Mono<ServerResponse> importDocs(ServerRequest request) {
         var kbName = request.pathVariable("name");
-        return request.multipartData().flatMap(parts -> {
-            Part parentPart = parts.getFirst("parentName");
-            String rawParent = parentPart instanceof FormFieldPart field ? field.value() : null;
-            String parentName = StringUtils.hasText(rawParent) ? rawParent : null;
-            List<FilePart> files = parts.get("files").stream()
-                .filter(FilePart.class::isInstance)
-                .map(FilePart.class::cast)
-                .toList();
-            var order = new AtomicInteger(0);
-            return currentUsername(request).flatMap(author ->
-                    importAll(kbName, parentName, files, order, author))
-                .map(count -> Map.of("count", count))
-                .flatMap(ServerResponse.ok()::bodyValue);
-        });
+        return knowledgeBaseService.requireAccessByName(kbName)
+            .then(request.multipartData().flatMap(parts -> {
+                Part parentPart = parts.getFirst("parentName");
+                String rawParent = parentPart instanceof FormFieldPart field ? field.value() : null;
+                String parentName = StringUtils.hasText(rawParent) ? rawParent : null;
+                List<FilePart> files = parts.get("files").stream()
+                    .filter(FilePart.class::isInstance)
+                    .map(FilePart.class::cast)
+                    .toList();
+                var order = new AtomicInteger(0);
+                return currentUsername(request).flatMap(author ->
+                        importAll(kbName, parentName, files, order, author))
+                    .map(count -> Map.of("count", count))
+                    .flatMap(ServerResponse.ok()::bodyValue);
+            }));
     }
 
     private Mono<Integer> importAll(String kbName, String parentName, List<FilePart> files,
@@ -199,28 +211,39 @@ public class KnowledgeBaseDocConsoleEndpoint implements CustomEndpoint {
     private Mono<ServerResponse> publishDoc(ServerRequest request) {
         var kbName = request.pathVariable("name");
         var docName = request.pathVariable("docName");
-        return docService.publish(kbName, docName)
-            .then(ServerResponse.ok().build());
+        return knowledgeBaseService.requireAccessByName(kbName)
+            .then(docService.publish(kbName, docName)
+                .then(ServerResponse.ok().build()));
+    }
+
+    private Mono<ServerResponse> unpublishDoc(ServerRequest request) {
+        var kbName = request.pathVariable("name");
+        var docName = request.pathVariable("docName");
+        return knowledgeBaseService.requireAccessByName(kbName)
+            .then(docService.unpublish(kbName, docName)
+                .then(ServerResponse.ok().build()));
     }
 
     private Mono<ServerResponse> moveDoc(ServerRequest request) {
         var kbName = request.pathVariable("name");
         var docName = request.pathVariable("docName");
-        return request.bodyToMono(MoveDocRequest.class)
-            .flatMap(move -> docService.move(kbName, docName, move.parentName(), move.priority(),
-                move.beforeName(), move.afterName()))
-            .then(ServerResponse.ok().build());
+        return knowledgeBaseService.requireAccessByName(kbName)
+            .then(request.bodyToMono(MoveDocRequest.class)
+                .flatMap(move -> docService.move(kbName, docName, move.parentName(), move.priority(),
+                    move.beforeName(), move.afterName()))
+                .then(ServerResponse.ok().build()));
     }
 
     private Mono<ServerResponse> exportDoc(ServerRequest request) {
         var kbName = request.pathVariable("name");
         var docName = request.pathVariable("docName");
-        return docService.exportMarkdown(kbName, docName)
-            .flatMap(markdown -> ServerResponse.ok()
-                .contentType(MediaType.TEXT_PLAIN)
-                .header(HttpHeaders.CONTENT_DISPOSITION,
-                    "attachment; filename=\"" + docName + ".md\"")
-                .bodyValue(markdown));
+        return knowledgeBaseService.requireAccessByName(kbName)
+            .then(docService.exportMarkdown(kbName, docName)
+                .flatMap(markdown -> ServerResponse.ok()
+                    .contentType(MediaType.TEXT_PLAIN)
+                    .header(HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"" + docName + ".md\"")
+                    .bodyValue(markdown)));
     }
 
     @Override

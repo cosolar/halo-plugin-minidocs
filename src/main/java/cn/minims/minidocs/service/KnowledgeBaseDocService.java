@@ -1,4 +1,4 @@
-package run.halo.plugin.minidocs.service;
+package cn.minims.minidocs.service;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
@@ -38,9 +39,9 @@ import run.halo.app.extension.PageRequestImpl;
 import run.halo.app.extension.ReactiveExtensionClient;
 import tools.jackson.databind.json.JsonMapper;
 import run.halo.app.plugin.ReactiveSettingFetcher;
-import run.halo.plugin.minidocs.extension.KnowledgeBase;
-import run.halo.plugin.minidocs.extension.KnowledgeBaseDoc;
-import run.halo.plugin.minidocs.setting.BasicSetting;
+import cn.minims.minidocs.extension.KnowledgeBase;
+import cn.minims.minidocs.extension.KnowledgeBaseDoc;
+import cn.minims.minidocs.setting.BasicSetting;
 
 import static org.springframework.data.domain.Sort.Order;
 import static run.halo.app.extension.index.query.Queries.and;
@@ -182,6 +183,19 @@ public class KnowledgeBaseDocService {
         return get(kbName, docName).flatMap(doc -> {
             doc.getSpec().setPhase(PHASE_PUBLISHED);
             doc.getSpec().setPublishTime(Instant.now());
+            doc.getSpec().setUpdateTime(Instant.now());
+            return client.update(doc)
+                .then(knowledgeBaseService.touch(kbName));
+        });
+    }
+
+    /**
+     * 取消发布：将已发布文档置回草稿状态，并清除发布时间，刷新所属知识库统计。
+     */
+    public Mono<Void> unpublish(String kbName, String docName) {
+        return get(kbName, docName).flatMap(doc -> {
+            doc.getSpec().setPhase(PHASE_DRAFT);
+            doc.getSpec().setPublishTime(null);
             doc.getSpec().setUpdateTime(Instant.now());
             return client.update(doc)
                 .then(knowledgeBaseService.touch(kbName));
@@ -472,7 +486,6 @@ public class KnowledgeBaseDocService {
         kb.put("displayName", nullSafe(kbSpec.getDisplayName()));
         kb.put("description", nullSafe(kbSpec.getDescription()));
         kb.put("cover", nullSafe(kbSpec.getCover()));
-        kb.put("logo", nullSafe(kbSpec.getLogo()));
         kb.put("tags", kbSpec.getTags() == null ? List.of() : kbSpec.getTags());
         kb.put("publicVisible", Boolean.TRUE.equals(kbSpec.getPublicVisible()));
         cfg.put("knowledgeBase", kb);
@@ -559,22 +572,57 @@ public class KnowledgeBaseDocService {
             .collectList();
     }
 
+    /**
+     * 执行单个知识库导入（strategy 为 overwrite 或 skip）。
+     *
+     * <p>overwrite 采用“先建新、验证成功后替换、失败回滚”的安全策略，杜绝中途失败时原数据
+     * 已被级联删除的风险：
+     * <ol>
+     *   <li>先把导入内容完整写入一个临时知识库（使用临时 slug，避免与旧库冲突）；</li>
+     *   <li>验证文档数量与 zip 一致（完整校验）后，才删除原同名知识库；</li>
+     *   <li>最后把临时库的 slug 恢复为备份中的原名（若提供且唯一）；</li>
+     *   <li>若任一步骤失败，删除已创建的临时知识库并回滚，原数据保持不变。</li>
+     * </ol>
+     */
     private Mono<ImportResultItem> importOne(ImportInfo info, String strategy, String creator) {
-        return knowledgeBaseService.findExistingByName(info.kbConfig.displayName())
+        var displayName = info.kbConfig.displayName();
+        return knowledgeBaseService.findExistingByName(displayName)
             .flatMap(existing -> {
                 if ("skip".equalsIgnoreCase(strategy)) {
-                    return Mono.just(new ImportResultItem(info.kbConfig.displayName(), false,
+                    return Mono.just(new ImportResultItem(displayName, false,
                         "已存在同名知识库，已跳过"));
                 }
-                return knowledgeBaseService.delete(existing.getMetadata().getName())
-                    .then(doImportKnowledgeBase(info, creator))
-                    .thenReturn(new ImportResultItem(info.kbConfig.displayName(), true, "已覆盖导入"));
+                var oldKbName = existing.getMetadata().getName();
+                var importedRef = new AtomicReference<String>();
+                return doImportKnowledgeBase(info, creator, false)
+                    .flatMap(newKbName -> {
+                        importedRef.set(newKbName);
+                        return knowledgeBaseService.delete(oldKbName)
+                            .then(restoreSlug(newKbName, nullSafe(info.kbConfig.slug())))
+                            .thenReturn(new ImportResultItem(displayName, true,
+                                "已覆盖导入，原数据已替换"));
+                    })
+                    .onErrorResume(err -> {
+                        String newKb = importedRef.get();
+                        return cleanupImport(newKb)
+                            .then(Mono.just(new ImportResultItem(displayName, false,
+                                "覆盖导入失败（" + brief(err) + "），已回滚，原数据保留")));
+                    });
             })
-            .switchIfEmpty(Mono.defer(() -> doImportKnowledgeBase(info, creator)
-                .thenReturn(new ImportResultItem(info.kbConfig.displayName(), true, "导入成功"))));
+            // 同名知识库不存在：全新导入
+            .switchIfEmpty(Mono.defer(() -> doImportKnowledgeBase(info, creator, true)
+                .thenReturn(new ImportResultItem(displayName, true, "导入成功"))));
     }
 
-    private Mono<Void> doImportKnowledgeBase(ImportInfo info, String creator) {
+    /**
+     * 全量导入一个知识库到新建扩展，返回新知识库 metadata.name。
+     *
+     * @param useConfigSlug 是否直接使用 config.json 中的 slug（新库导入时使用）；
+     *                      覆盖导入时传 {@code false}，建库先用自动生成 slug（避免与旧库冲突），
+     *                      删除旧库后再由 {@link #restoreSlug} 恢复。
+     */
+    private Mono<String> doImportKnowledgeBase(ImportInfo info, String creator,
+        boolean useConfigSlug) {
         var kb = new KnowledgeBase();
         var kbMd = new Metadata();
         kbMd.setName(UUID.randomUUID().toString());
@@ -582,33 +630,78 @@ public class KnowledgeBaseDocService {
         var spec = new KnowledgeBase.Spec();
         var c = info.kbConfig;
         spec.setDisplayName(c.displayName());
-        spec.setSlug(nullSafe(c.slug()));
+        spec.setSlug(useConfigSlug ? nullSafe(c.slug()) : null);
         spec.setDescription(nullSafe(c.description()));
         spec.setCover(nullSafe(c.cover()));
-        spec.setLogo(nullSafe(c.logo()));
         spec.setTags(c.tags());
         spec.setPublicVisible(c.publicVisible());
         kb.setSpec(spec);
         return knowledgeBaseService.create(kb, creator).flatMap(created -> {
             var kbName = created.getMetadata().getName();
-            return Flux.fromIterable(info.documents())
-                .concatMap(d -> createImportedDoc(kbName, d, info.contentBySlug(), creator))
-                .collectMap(ImportedDocument::slug, ImportedDocument::name, HashMap::new)
-                .flatMap(nameBySlug -> Flux.fromIterable(info.documents())
-                    .filter(d -> StringUtils.hasText(d.parent()))
-                    .concatMap(d -> {
-                        var parentName = nameBySlug.get(d.parent());
-                        if (parentName == null) {
-                            return Mono.empty();
-                        }
-                        return client.fetch(KnowledgeBaseDoc.class, nameBySlug.get(d.slug()))
-                            .flatMap(pDoc -> {
-                                pDoc.getSpec().setParentName(parentName);
-                                return client.update(pDoc).then();
-                            });
-                    })
-                    .then(knowledgeBaseService.refreshStats(kbName)));
+            return importDocsToKb(kbName, info, creator).flatMap(count -> {
+                int expected = info.documents().size();
+                if (count != expected) {
+                    return Mono.error(new IllegalStateException(
+                        "文档导入不完整（期望 " + expected + "，实际 " + count + "）"));
+                }
+                return Mono.just(kbName);
+            });
         });
+    }
+
+    /**
+     * 将 zip 中某知识库的全部文档导入到指定知识库，恢复父子关系并刷新统计，返回导入文档数。
+     */
+    private Mono<Integer> importDocsToKb(String kbName, ImportInfo info, String creator) {
+        return Flux.fromIterable(info.documents())
+            .concatMap(d -> createImportedDoc(kbName, d, info.contentBySlug(), creator))
+            .collectMap(ImportedDocument::slug, ImportedDocument::name, HashMap::new)
+            .flatMap(nameBySlug -> Flux.fromIterable(info.documents())
+                .filter(d -> StringUtils.hasText(d.parent()))
+                .concatMap(d -> {
+                    var parentName = nameBySlug.get(d.parent());
+                    if (parentName == null) {
+                        return Mono.empty();
+                    }
+                    return client.fetch(KnowledgeBaseDoc.class, nameBySlug.get(d.slug()))
+                        .flatMap(pDoc -> {
+                            pDoc.getSpec().setParentName(parentName);
+                            return client.update(pDoc).then();
+                        });
+                })
+                .then(knowledgeBaseService.refreshStats(kbName))
+                .thenReturn(nameBySlug.size()));
+    }
+
+    /**
+     * 覆盖导入成功后，将新知识库的 slug 恢复为 config.json 中的原名（若提供且未被占用）。
+     * 恢复失败（如已被其它知识库占用）时静默保留自动生成 slug，不影响导入成功。
+     */
+    private Mono<Void> restoreSlug(String kbName, String configSlug) {
+        if (!StringUtils.hasText(configSlug)) {
+            return Mono.empty();
+        }
+        return knowledgeBaseService.get(kbName)
+            .flatMap(kb -> {
+                kb.getSpec().setSlug(configSlug);
+                return knowledgeBaseService.update(kbName, kb).then();
+            })
+            .onErrorResume(e -> Mono.empty());
+    }
+
+    /**
+     * 回滚：删除新建/部分导入的临时知识库（连同其下文档），原数据不受影响。
+     */
+    private Mono<Void> cleanupImport(String newKbName) {
+        if (newKbName == null) {
+            return Mono.empty();
+        }
+        return knowledgeBaseService.delete(newKbName).onErrorResume(e -> Mono.empty());
+    }
+
+    private String brief(Throwable e) {
+        var msg = e.getMessage();
+        return msg == null || msg.isBlank() ? e.getClass().getSimpleName() : msg;
     }
 
     private Mono<ImportedDocument> createImportedDoc(String kbName, ImportedDocInfo d,
@@ -715,7 +808,6 @@ public class KnowledgeBaseDocService {
                     kbNode.path("slug").asString(""),
                     kbNode.path("description").asString(""),
                     kbNode.path("cover").asString(""),
-                    kbNode.path("logo").asString(""),
                     tags,
                     kbNode.path("publicVisible").asBoolean(false)
                 ),
@@ -753,7 +845,7 @@ public class KnowledgeBaseDocService {
     }
 
     private record ImportedKbConfig(String displayName, String slug, String description,
-        String cover, String logo, List<String> tags, boolean publicVisible) {
+        String cover, List<String> tags, boolean publicVisible) {
     }
 
     private record ImportedDocInfo(String slug, String title, String parent, String phase,

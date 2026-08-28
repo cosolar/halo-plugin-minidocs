@@ -73,6 +73,77 @@
       .nav-title { font-size: 16px; font-weight: 700; letter-spacing: .2px; }
       .nav-user { display: flex; align-items: center; gap: 8px; color: var(--md-sub); font-size: 14px; }
       .nav-user .dot { width: 8px; height: 8px; border-radius: 50%; background: #10b981; }
+      .nav-stats { display: flex; align-items: center; gap: 8px; }
+      .nav-stat-num { font-variant-numeric: tabular-nums; }
+
+      /* 访问量徽章（只读展示、不可点击） */
+      .nav-stat.nav-stat--view {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        height: 32px;
+        padding: 0 12px;
+        font-size: 13px;
+        color: var(--md-sub);
+        background: linear-gradient(180deg, var(--md-bg1), var(--md-bg2));
+        border: 1px solid var(--md-border);
+        border-radius: 9px;
+        white-space: nowrap;
+        cursor: default;
+        user-select: none;
+        transition: color .15s ease, border-color .15s ease;
+      }
+      .nav-stat.nav-stat--view svg {
+        width: 15px;
+        height: 15px;
+        color: #64748b;
+        opacity: .9;
+        transition: color .15s ease;
+      }
+      .nav-stat.nav-stat--view:hover { color: var(--md-body); border-color: #93c5fd; }
+      .nav-stat.nav-stat--view:hover svg { color: #3b82f6; }
+      .nav-stat--view .nav-stat-num { font-weight: 600; }
+
+      /* 点赞按钮（可点击、一次性点赞） */
+      .nav-btn.nav-btn--like {
+        gap: 7px;
+        padding: 0 12px;
+        border-radius: 9px;
+        background: linear-gradient(180deg, var(--md-bg1), var(--md-bg2));
+      }
+      .nav-btn.nav-btn--like svg.heart {
+        width: 15px;
+        height: 15px;
+        color: #94a3b8;
+        fill: transparent;
+        transition: color .18s ease, fill .18s ease, transform .18s ease;
+      }
+      .nav-btn.nav-btn--like:hover {
+        border-color: #fda4af;
+        background: linear-gradient(180deg, #fff1f2, #ffe4e6);
+      }
+      .nav-btn.nav-btn--like:hover svg.heart { color: #f43f5e; transform: scale(1.12); }
+      .nav-btn.nav-btn--like:hover .nav-stat-num { color: #be123c; }
+
+      /* 已点过赞：玫红渐变实心 */
+      .nav-btn.nav-btn--like.is-liked {
+        color: #fff;
+        background: linear-gradient(135deg, #fb7185, #e11d48);
+        border-color: #e11d48;
+        box-shadow: 0 2px 10px rgba(225, 29, 72, .35);
+      }
+      .nav-btn.nav-btn--like.is-liked svg.heart { color: #fff; fill: #fff; }
+      .nav-btn.nav-btn--like.is-liked .nav-stat-num { color: #fff; font-weight: 700; }
+
+      /* 点赞点击心跳动画 */
+      @keyframes md-heart-beat {
+        0% { transform: scale(1); }
+        30% { transform: scale(1.45); }
+        55% { transform: scale(.92); }
+        75% { transform: scale(1.18); }
+        100% { transform: scale(1); }
+      }
+      .nav-btn.nav-btn--like.popping svg.heart { animation: md-heart-beat .55s ease; }
       .nav-trails { display: flex; align-items: center; gap: 8px; }
       .nav-btn {
         display: inline-flex;
@@ -185,6 +256,19 @@
         flex: 0 0 auto;
         width: 36px;
         height: 36px;
+        border-radius: 9px;
+        overflow: hidden;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, .08);
+      }
+      .md-sb-logo img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+      }
+      .md-sb-logo-fallback {
+        width: 100%;
+        height: 100%;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -192,7 +276,6 @@
         font-weight: 700;
         color: #fff;
         background: linear-gradient(135deg, #10b981, #059669);
-        clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%);
       }
       .md-sb-name { min-width: 0; }
       .md-sb-name h2 {
@@ -728,6 +811,23 @@
             </svg>
           </button>
         </div>
+        <div class="nav-stats">
+          <button class="nav-btn nav-btn--like" id="md-like" type="button" title="点赞这个知识库">
+            <svg class="heart" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+            </svg>
+            <span class="nav-stat-num" id="md-like-count">0</span>
+          </button>
+          <span class="nav-stat nav-stat--view" title="访问量">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+              <circle cx="12" cy="12" r="3"></circle>
+            </svg>
+            <span class="nav-stat-num" id="md-view-count">0</span>
+          </span>
+        </div>
         <div class="nav-user">
           <span class="dot"></span>
           <span th:text="${#strings.defaultString(loginUser, '未登录')}">未登录</span>
@@ -744,7 +844,13 @@
       <!-- 左侧：文档树 -->
       <aside class="md-sb" id="md-sb">
         <div class="md-sb-head">
-          <span class="md-sb-logo" th:text="${knowledgeBase.spec.displayName != null and !knowledgeBase.spec.displayName.isEmpty() ? #strings.substring(knowledgeBase.spec.displayName, 0, 1) : '知'}"></span>
+          <span class="md-sb-logo">
+            <img th:if="${knowledgeBase.spec.cover != null and !knowledgeBase.spec.cover.isEmpty()}"
+                 th:src="${knowledgeBase.spec.cover}" alt="知识库图标">
+            <span class="md-sb-logo-fallback"
+                  th:unless="${knowledgeBase.spec.cover != null and !knowledgeBase.spec.cover.isEmpty()}"
+                  th:text="${knowledgeBase.spec.displayName != null and !knowledgeBase.spec.displayName.isEmpty() ? #strings.substring(knowledgeBase.spec.displayName, 0, 1) : '知'}">知</span>
+          </span>
           <div class="md-sb-name">
             <h2 th:text="${knowledgeBase.spec.displayName}"></h2>
             <p>
@@ -883,9 +989,83 @@
       </li>
     </th:block>
 
-    <script>
+    <script th:inline="javascript">
       (function () {
         'use strict';
+
+        // 知识库访问量 / 点赞（匿名也可点赞，前端 localStorage 缓存去重，一次性点赞）
+        (function () {
+          var kbSlug = /*[[${kbSlug}]]*/ '';
+          var likeBtn = document.getElementById('md-like');
+          var likeCountEl = document.getElementById('md-like-count');
+          var viewCountEl = document.getElementById('md-view-count');
+          function api(path) {
+            return '/apis/api.minidocs.halo.run/v1alpha1/knowledgebases/'
+              + encodeURIComponent(kbSlug) + path;
+          }
+          function likeKey() { return 'minidocs:like:' + kbSlug; }
+          function locallyLiked() {
+            try { return localStorage.getItem(likeKey()) === '1'; } catch (e) { return false; }
+          }
+          function setLocallyLiked() {
+            try { localStorage.setItem(likeKey(), '1'); } catch (e) {}
+          }
+          // 展示已赞：登录用户由服务端返回、匿名/本机已赞由 localStorage 兜底
+          function markLiked() {
+            if (!likeBtn) return;
+            likeBtn.classList.add('is-liked');
+            likeBtn.classList.remove('popping');
+            void likeBtn.offsetWidth; // 强制 reflow 以重触发心跳动画
+            likeBtn.classList.add('popping');
+          }
+          function updateLikeUi(count, liked) {
+            if (likeCountEl && typeof count === 'number') likeCountEl.textContent = count;
+            if (liked) markLiked();
+          }
+          function refreshLikeUi(data) {
+            if (data && typeof data.likeCount === 'number' && likeCountEl) {
+              likeCountEl.textContent = data.likeCount;
+            }
+            var liked = !!(data && data.liked) || locallyLiked();
+            if (likeBtn) likeBtn.classList.toggle('is-liked', liked);
+          }
+          if (kbSlug) {
+            // 拉取最新访问量 / 点赞量 / 是否已赞，校正服务端渲染值
+            fetch(api('/stats'), { credentials: 'include' })
+              .then(function (r) { return r.ok ? r.json() : null; })
+              .then(function (data) {
+                if (data) {
+                  refreshLikeUi(data);
+                  if (viewCountEl && typeof data.accessCount === 'number') {
+                    viewCountEl.textContent = data.accessCount;
+                  }
+                }
+              })
+              .catch(function () {});
+          }
+          if (likeBtn && kbSlug) {
+            likeBtn.addEventListener('click', function () {
+              if (locallyLiked()) {
+                toast('该知识库已点赞过了');
+                markLiked();
+                return;
+              }
+              fetch(api('/like'), { method: 'POST', credentials: 'include' })
+                .then(function (r) {
+                  if (!r.ok) throw { failed: true };
+                  return r.json();
+                })
+                .then(function (data) {
+                  setLocallyLiked();
+                  updateLikeUi(data && data.likeCount, true);
+                  toast('点赞成功');
+                })
+                .catch(function () {
+                  toast('点赞失败，请稍后重试');
+                });
+            });
+          }
+        })();
 
         function toast(msg) {
           var t = document.getElementById('md-toast');

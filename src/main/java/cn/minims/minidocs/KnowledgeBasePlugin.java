@@ -1,4 +1,4 @@
-package run.halo.plugin.minidocs;
+package cn.minims.minidocs;
 
 import java.time.Instant;
 import java.util.Set;
@@ -9,8 +9,8 @@ import run.halo.app.extension.SchemeManager;
 import run.halo.app.extension.index.IndexSpecs;
 import run.halo.app.plugin.BasePlugin;
 import run.halo.app.plugin.PluginContext;
-import run.halo.plugin.minidocs.extension.KnowledgeBase;
-import run.halo.plugin.minidocs.extension.KnowledgeBaseDoc;
+import cn.minims.minidocs.extension.KnowledgeBase;
+import cn.minims.minidocs.extension.KnowledgeBaseDoc;
 
 /**
  * 知识库插件入口。
@@ -50,6 +50,9 @@ public class KnowledgeBasePlugin extends BasePlugin {
                 .indexFunc(kb -> kb.getSpec() == null ? null : kb.getSpec().getUpdateTime()));
             indexSpecs.add(IndexSpecs.<KnowledgeBase, String>single("spec.slug", String.class)
                 .indexFunc(kb -> kb.getSpec() == null ? null : kb.getSpec().getSlug()));
+            indexSpecs.add(IndexSpecs.<KnowledgeBase, String>single("spec.shareToken",
+                    String.class)
+                .indexFunc(kb -> kb.getSpec() == null ? null : kb.getSpec().getShareToken()));
             indexSpecs.add(IndexSpecs.<KnowledgeBase, Integer>single("status.docCount",
                     Integer.class)
                 .indexFunc(kb -> kb.getStatus() == null ? null : kb.getStatus().getDocCount()));

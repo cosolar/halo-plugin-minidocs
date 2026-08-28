@@ -1,4 +1,4 @@
-package run.halo.plugin.minidocs.endpoint;
+package cn.minims.minidocs.endpoint;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;

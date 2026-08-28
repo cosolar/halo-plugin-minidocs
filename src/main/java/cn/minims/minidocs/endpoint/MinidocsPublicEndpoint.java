@@ -1,11 +1,14 @@
-package run.halo.plugin.minidocs.endpoint;
+package cn.minims.minidocs.endpoint;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.core.context.ReactiveSecurityContextHolder;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 import org.springframework.web.reactive.function.server.RouterFunction;
 import org.springframework.web.reactive.function.server.ServerRequest;
 import org.springframework.web.reactive.function.server.ServerResponse;
@@ -14,12 +17,12 @@ import reactor.core.publisher.Mono;
 import run.halo.app.core.extension.endpoint.CustomEndpoint;
 import run.halo.app.extension.GroupVersion;
 import run.halo.app.plugin.ReactiveSettingFetcher;
-import run.halo.plugin.minidocs.extension.KnowledgeBase;
-import run.halo.plugin.minidocs.extension.KnowledgeBaseDoc;
-import run.halo.plugin.minidocs.service.KnowledgeBaseDocService;
-import run.halo.plugin.minidocs.service.KnowledgeBaseDocService.DocTreeNode;
-import run.halo.plugin.minidocs.service.KnowledgeBaseService;
-import run.halo.plugin.minidocs.setting.BasicSetting;
+import cn.minims.minidocs.extension.KnowledgeBase;
+import cn.minims.minidocs.extension.KnowledgeBaseDoc;
+import cn.minims.minidocs.service.KnowledgeBaseDocService;
+import cn.minims.minidocs.service.KnowledgeBaseDocService.DocTreeNode;
+import cn.minims.minidocs.service.KnowledgeBaseService;
+import cn.minims.minidocs.setting.BasicSetting;
 
 import static org.springframework.web.reactive.function.server.RouterFunctions.route;
 
@@ -49,6 +52,10 @@ public class MinidocsPublicEndpoint implements CustomEndpoint {
             .GET("/knowledgebases/{kbSlug}/docs", this::listDocs)
             .GET("/knowledgebases/{kbSlug}/docs/{docSlug}", this::getDoc)
             .GET("/docs/{docSlug}", this::getDocBySlug)
+            .GET("/knowledgebases/{kbSlug}/stats", this::getStats)
+            .POST("/knowledgebases/{kbSlug}/like", this::toggleLike)
+            .GET("/share/{shareToken}/stats", this::getShareStats)
+            .POST("/share/{shareToken}/like", this::toggleShareLike)
             .build();
     }
 
@@ -109,6 +116,118 @@ public class MinidocsPublicEndpoint implements CustomEndpoint {
                 .flatMap(doc -> getPublicKnowledgeBase(doc.getSpec().getKnowledgeBaseName())
                     .thenReturn(doc))
                 .flatMap(doc -> ServerResponse.ok().bodyValue(doc)));
+    }
+
+    /**
+     * 知识库访问量 / 点赞量统计（公开知识库或当前用户有权限访问的私有知识库）。
+     */
+    private Mono<ServerResponse> getStats(ServerRequest request) {
+        var kbSlug = request.pathVariable("kbSlug");
+        return resolveAccessible(kbSlug)
+            .flatMap(kb -> knowledgeBaseService.currentUsername()
+                .map(username -> {
+                    var spec = kb.getSpec();
+                    var likedUsers = spec.getLikedUsers();
+                    var liked = StringUtils.hasText(username) && likedUsers != null
+                        && likedUsers.contains(username);
+                    Map<String, Object> body = new LinkedHashMap<>();
+                    body.put("accessCount", spec.getAccessCount() == null ? 0L
+                        : spec.getAccessCount());
+                    body.put("likeCount", spec.getLikeCount() == null ? 0L
+                        : spec.getLikeCount());
+                    body.put("liked", liked);
+                    return body;
+                })
+                .flatMap(body -> ServerResponse.ok().bodyValue(body)));
+    }
+
+    /**
+     * 知识库点赞（一次性、幂等，匿名用户也可点赞）。
+     * <p>已登录用户由 likedUsers 记录去重；匿名用户由前端 localStorage 缓存防止重复点赞。
+     */
+    private Mono<ServerResponse> toggleLike(ServerRequest request) {
+        var kbSlug = request.pathVariable("kbSlug");
+        return resolveAccessible(kbSlug)
+            .flatMap(kb -> knowledgeBaseService.currentUsername()
+                .flatMap(username ->
+                    knowledgeBaseService.likeOnce(kb.getMetadata().getName(), username)
+                        .flatMap(body -> ServerResponse.ok().bodyValue(body))));
+    }
+
+    /**
+     * 分享链路访问量/点赞统计（仅需有效外链，不要求公开或登录）。
+     */
+    private Mono<ServerResponse> getShareStats(ServerRequest request) {
+        var token = request.pathVariable("shareToken");
+        return resolveShareAccess(token, request)
+            .flatMap(kb -> knowledgeBaseService.currentUsername()
+                .map(username -> {
+                    var spec = kb.getSpec();
+                    var liked = StringUtils.hasText(username) && spec.getLikedUsers() != null
+                        && spec.getLikedUsers().contains(username);
+                    Map<String, Object> body = new LinkedHashMap<>();
+                    body.put("accessCount", spec.getAccessCount() == null ? 0L
+                        : spec.getAccessCount());
+                    body.put("likeCount", spec.getLikeCount() == null ? 0L
+                        : spec.getLikeCount());
+                    body.put("liked", liked);
+                    return body;
+                })
+                .flatMap(body -> ServerResponse.ok().bodyValue(body)));
+    }
+
+    /**
+     * 分享链路点赞（一次性、幂等，无需登录）。
+     */
+    private Mono<ServerResponse> toggleShareLike(ServerRequest request) {
+        var token = request.pathVariable("shareToken");
+        return resolveShareAccess(token, request)
+            .flatMap(kb -> knowledgeBaseService.currentUsername()
+                .flatMap(username ->
+                    knowledgeBaseService.likeOnce(kb.getMetadata().getName(), username)
+                        .flatMap(body -> ServerResponse.ok().bodyValue(body))));
+    }
+
+    /**
+     * 按分享 token 解析知识库并做分享级校验：开启且未过期，且（若设置了密码）请求需携带
+     * 匹配的访问 cookie。不要求知识库公开、不要求登录——仅需有效外链。
+     */
+    private Mono<KnowledgeBase> resolveShareAccess(String shareToken, ServerRequest request) {
+        return knowledgeBaseService.findByShareToken(shareToken)
+            .flatMap(kb -> {
+                var state = KnowledgeBaseService.shareState(kb);
+                if (!state.enabled() || state.expired()) {
+                    return Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "分享链接不存在或已失效"));
+                }
+                if (state.passwordRequired()) {
+                    var list = request.cookies().get(KnowledgeBaseService.shareCookieName(
+                        shareToken));
+                    var value = list == null || list.isEmpty() ? null : list.get(0).getValue();
+                    if (!KnowledgeBaseService.shareCookieMatches(kb, value)) {
+                        return Mono.error(new ResponseStatusException(HttpStatus.FORBIDDEN,
+                            "需要访问密码"));
+                    }
+                }
+                return Mono.just(kb);
+            });
+    }
+
+    /**
+     * 解析知识库并按当前用户做资源级可见性校验：公开知识库放行；
+     * 私有知识库仅创建者/成员/管理权限者可见，其余 404。
+     */
+    private Mono<KnowledgeBase> resolveAccessible(String kbSlug) {
+        return knowledgeBaseService.getBySlugOrName(kbSlug)
+            .flatMap(kb -> knowledgeBaseService.currentAccess()
+                .flatMap(access -> {
+                    if (KnowledgeBaseService.canAccess(kb, access.username(),
+                        access.manage())) {
+                        return Mono.just(kb);
+                    }
+                    return Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "知识库不存在或无访问权限: " + kbSlug));
+                }));
     }
 
     /**

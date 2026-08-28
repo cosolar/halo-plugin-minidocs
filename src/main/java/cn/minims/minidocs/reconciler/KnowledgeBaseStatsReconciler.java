@@ -1,4 +1,4 @@
-package run.halo.plugin.minidocs.reconciler;
+package cn.minims.minidocs.reconciler;
 
 import java.time.Instant;
 import java.util.Objects;
@@ -10,8 +10,8 @@ import run.halo.app.extension.ListOptions;
 import run.halo.app.extension.controller.Controller;
 import run.halo.app.extension.controller.ControllerBuilder;
 import run.halo.app.extension.controller.Reconciler;
-import run.halo.plugin.minidocs.extension.KnowledgeBase;
-import run.halo.plugin.minidocs.extension.KnowledgeBaseDoc;
+import cn.minims.minidocs.extension.KnowledgeBase;
+import cn.minims.minidocs.extension.KnowledgeBaseDoc;
 
 import static run.halo.app.extension.index.query.Queries.and;
 import static run.halo.app.extension.index.query.Queries.equal;

@@ -7,54 +7,74 @@
     <title>知识库</title>
     <style>
       :root {
-        --md-primary: #14b8a6;
-        --md-primary-soft: #2dd4bf;
-        --md-primary-deep: #0d9488;
-        --md-primary-ink: #0f766e;
-        --md-primary-glow: rgba(20, 184, 166, .16);
+        /* 主色：emerald 绿 */
+        --md-primary: #10b981;
+        --md-primary-soft: #34d399;
+        --md-primary-deep: #059669;
+        --md-primary-ink: #047857;
+        --md-primary-glow: rgba(16, 185, 129, .14);
+
+        /* 功能色 */
+        --md-c-green: #10b981;
+        --md-c-green-bg: rgba(16, 185, 129, .12);
+        --md-c-blue: #3b82f6;
+        --md-c-blue-bg: rgba(59, 130, 246, .12);
+        --md-c-purple: #8b5cf6;
+        --md-c-purple-bg: rgba(139, 92, 246, .12);
+        --md-c-orange: #f59e0b;
+        --md-c-orange-bg: rgba(245, 158, 11, .14);
+
         --md-bg1: #ffffff;
-        --md-bg2: #f6f8f9;
+        --md-bg2: #f5f7fa;
         --md-card: #ffffff;
         --md-card-hover: #ffffff;
-        --md-card-shadow: 0 2px 10px rgba(15, 40, 40, .06);
-        --md-card-shadow-hover: 0 14px 30px rgba(13, 90, 90, .14);
-        --md-border: #e7edef;
-        --md-border-strong: #d7e7e2;
-        --md-title: #12322e;
-        --md-sub: #5f7a76;
-        --md-desc: #6b8580;
-        --md-muted: #94aba6;
-        --md-tag-bg: rgba(20, 148, 132, .12);
-        --md-tag: #0d9488;
-        --md-chip-bg: #f2faf7;
+        --md-card-shadow: 0 1px 3px rgba(16, 24, 40, .06), 0 1px 2px rgba(16, 24, 40, .04);
+        --md-card-shadow-hover: 0 12px 28px rgba(5, 120, 80, .16);
+        --md-border: #e5e9ef;
+        --md-border-strong: #d3dce6;
+        --md-title: #1f2937;
+        --md-sub: #6b7280;
+        --md-desc: #6b7280;
+        --md-muted: #9ca3af;
+        --md-tag-bg: rgba(16, 185, 129, .12);
+        --md-tag: #059669;
+        --md-chip-bg: #f2f6f4;
         --md-input-bg: #ffffff;
         --md-nav-h: 56px;
-        --md-scroll-thumb: rgba(13, 148, 136, .25);
+        --md-scroll-thumb: rgba(5, 150, 105, .28);
       }
       @media (prefers-color-scheme: dark) {
         :root {
-          --md-bg1: #0c1413;
-          --md-bg2: #08100f;
-          --md-primary: #2dd4bf;
-          --md-primary-soft: #5eead4;
-          --md-primary-deep: #2dd4bf;
-          --md-primary-ink: #99f6e4;
-          --md-primary-glow: rgba(45, 212, 191, .18);
-          --md-card: #101c1a;
-          --md-card-hover: #12201e;
-          --md-card-shadow: 0 3px 14px rgba(0, 0, 0, .4);
-          --md-card-shadow-hover: 0 18px 36px rgba(0, 0, 0, .55);
-          --md-border: #1d322e;
-          --md-border-strong: #2a4a44;
-          --md-title: #e6f5f1;
-          --md-sub: #8aa39e;
-          --md-desc: #9db5b0;
-          --md-muted: #6b847f;
-          --md-tag-bg: rgba(45, 212, 191, .16);
-          --md-tag: #5eead4;
-          --md-chip-bg: #142420;
-          --md-input-bg: #101c1a;
-          --md-scroll-thumb: rgba(45, 212, 191, .3);
+          --md-bg1: #151b29;
+          --md-bg2: #0e1420;
+          --md-primary: #34d399;
+          --md-primary-soft: #6ee7b7;
+          --md-primary-deep: #34d399;
+          --md-primary-ink: #a7f3d0;
+          --md-primary-glow: rgba(52, 211, 153, .16);
+          --md-c-green: #34d399;
+          --md-c-green-bg: rgba(52, 211, 153, .15);
+          --md-c-blue: #60a5fa;
+          --md-c-blue-bg: rgba(96, 165, 250, .15);
+          --md-c-purple: #a78bfa;
+          --md-c-purple-bg: rgba(167, 139, 250, .15);
+          --md-c-orange: #fbbf24;
+          --md-c-orange-bg: rgba(251, 191, 36, .15);
+          --md-card: #1a2233;
+          --md-card-hover: #1e2740;
+          --md-card-shadow: 0 2px 10px rgba(0, 0, 0, .35);
+          --md-card-shadow-hover: 0 14px 32px rgba(0, 0, 0, .5);
+          --md-border: #2a3348;
+          --md-border-strong: #3a4661;
+          --md-title: #eef2f7;
+          --md-sub: #9aa5b8;
+          --md-desc: #a3aebb;
+          --md-muted: #6b7688;
+          --md-tag-bg: rgba(52, 211, 153, .16);
+          --md-tag: #6ee7b7;
+          --md-chip-bg: #1c2536;
+          --md-input-bg: #1a2233;
+          --md-scroll-thumb: rgba(52, 211, 153, .3);
         }
       }
 
@@ -105,13 +125,16 @@
         border: 1px solid var(--md-border);
         border-radius: 999px; padding: 5px 14px;
       }
-      .nav-user .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--md-primary); }
+      .nav-user .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--md-primary); box-shadow: 0 0 0 3px var(--md-primary-glow); }
       .nav-user .name { font-weight: 600; }
 
       /* ---------- 主体内容 ---------- */
       .md-content {
         flex: 1 1 auto;
         min-height: 0;
+        width: 100%;
+        max-width: 1560px;
+        margin: 0 auto;
         display: flex;
         flex-direction: column;
         padding: 16px 22px 12px;
@@ -121,7 +144,7 @@
       .md-stats {
         flex: 0 0 auto;
         display: grid;
-        grid-template-columns: repeat(6, 1fr);
+        grid-template-columns: repeat(5, 1fr);
         gap: 12px;
       }
       .md-stat {
@@ -131,22 +154,26 @@
         min-width: 0;
         background: var(--md-card);
         border: 1px solid var(--md-border);
-        border-radius: 12px;
-        padding: 12px 14px;
+        border-radius: 14px;
+        padding: 13px 15px;
         box-shadow: var(--md-card-shadow);
+        transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
       }
+      .md-stat:hover { transform: translateY(-2px); border-color: var(--md-border-strong); box-shadow: var(--md-card-shadow-hover); }
       .md-stat-ico {
         flex: 0 0 auto;
-        width: 36px; height: 36px;
+        width: 38px; height: 38px;
         display: flex; align-items: center; justify-content: center;
-        border-radius: 10px;
-        background: var(--md-primary-glow);
-        color: var(--md-primary-deep);
+        border-radius: 11px;
       }
       .md-stat-ico svg { width: 20px; height: 20px; }
-      .md-stat-val { font-size: 20px; font-weight: 800; line-height: 1.1; color: var(--md-title); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-      .md-stat-val.is-text { font-size: 14px; line-height: 1.25; padding-top: 1px; }
-      .md-stat-label { font-size: 11.5px; color: var(--md-sub); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .md-stat-ico.is-green { background: var(--md-c-green-bg); color: var(--md-c-green); }
+      .md-stat-ico.is-blue { background: var(--md-c-blue-bg); color: var(--md-c-blue); }
+      .md-stat-ico.is-purple { background: var(--md-c-purple-bg); color: var(--md-c-purple); }
+      .md-stat-ico.is-orange { background: var(--md-c-orange-bg); color: var(--md-c-orange); }
+      .md-stat-val { font-size: 21px; font-weight: 800; line-height: 1.1; color: var(--md-title); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .md-stat-val.is-text { font-size: 14px; line-height: 1.25; padding-top: 2px; }
+      .md-stat-label { font-size: 11.5px; color: var(--md-sub); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
       /* ---------- 工具栏：搜索 + 排序 + 视图切换 ---------- */
       .md-toolbar {
@@ -154,18 +181,18 @@
         display: flex;
         align-items: center;
         gap: 14px;
-        margin-top: 14px;
+        margin-top: 16px;
       }
       .md-sec-title {
         flex: 0 0 auto;
         display: inline-flex; align-items: center; gap: 8px;
-        font-size: 15px; font-weight: 800; color: var(--md-title);
+        font-size: 16px; font-weight: 800; color: var(--md-title);
         white-space: nowrap;
       }
       .md-sec-title .ico {
-        width: 27px; height: 27px;
+        width: 28px; height: 28px;
         display: inline-flex; align-items: center; justify-content: center;
-        border-radius: 8px;
+        border-radius: 9px;
         background: var(--md-primary-glow); color: var(--md-primary-deep);
       }
       .md-sec-title .ico svg { width: 16px; height: 16px; }
@@ -252,48 +279,104 @@
       .sb-card {
         background: var(--md-card);
         border: 1px solid var(--md-border);
-        border-radius: 12px;
+        border-radius: 14px;
         box-shadow: var(--md-card-shadow);
         overflow: hidden;
       }
       .sb-head {
         display: flex; align-items: center; gap: 8px;
-        padding: 10px 14px;
+        padding: 11px 14px;
         border-bottom: 1px solid var(--md-border);
         font-size: 13.5px; font-weight: 700; color: var(--md-title);
       }
       .sb-head svg { width: 16px; height: 16px; color: var(--md-primary-deep); flex: 0 0 auto; }
+      .sb-head svg.h-purple { color: var(--md-c-purple); }
+      .sb-head svg.h-orange { color: var(--md-c-orange); }
+      .sb-more {
+        margin-left: auto; border: none; background: none; padding: 0;
+        font-family: inherit; font-size: 12px; font-weight: 600;
+        color: var(--md-primary-deep); cursor: pointer; white-space: nowrap;
+      }
+      .sb-more:hover { text-decoration: underline; }
       .sb-list { padding: 6px; display: flex; flex-direction: column; gap: 2px; }
       a.sb-item, .sb-item {
-        padding: 8px 10px; border-radius: 8px; cursor: pointer;
+        display: flex; align-items: center; gap: 9px;
+        padding: 8px 10px; border-radius: 9px; cursor: pointer;
         text-decoration: none; color: inherit;
         transition: background .15s ease;
       }
       a.sb-item:hover, .sb-item:hover { background: var(--md-primary-glow); }
-      .sb-item .t { font-size: 13px; font-weight: 600; color: var(--md-title); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-      .sb-item .m { font-size: 11.5px; color: var(--md-muted); margin-top: 3px; }
-      .sb-item .m .d { color: var(--md-primary-deep); font-weight: 600; }
-      .sb-owner { display: flex; align-items: center; gap: 9px; }
-      .sb-owner .dot {
-        flex: 0 0 auto; width: 24px; height: 24px; border-radius: 50%;
-        background: linear-gradient(135deg, var(--md-primary-soft), var(--md-primary-deep));
+      .sb-ico {
+        flex: 0 0 auto; width: 27px; height: 27px;
         display: inline-flex; align-items: center; justify-content: center;
-        font-size: 12px; font-weight: 800; color: #fff;
+        border-radius: 8px;
+        background: var(--md-primary-glow); color: var(--md-primary-deep);
       }
-      .sb-owner .meta { min-width: 0; }
-      .sb-owner .meta .t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-      .sb-owner .meta .m { margin-top: 2px; }
+      .sb-ico svg { width: 13px; height: 13px; }
+      .sb-txt { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+      .sb-item .t { font-size: 13px; font-weight: 600; color: var(--md-title); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .sb-item .m { font-size: 11.5px; color: var(--md-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .sb-item .m .live {
+        display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+        background: var(--md-primary); margin-right: 5px; vertical-align: 1px;
+        animation: mdPulse 2.2s ease-in-out infinite;
+      }
+      @keyframes mdPulse { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
+      .sb-empty { padding: 14px; color: var(--md-muted); font-size: 12.5px; }
+
+      /* 标签云 */
       .tag-cloud { display: flex; flex-wrap: wrap; gap: 7px; padding: 12px 14px; }
       .tag-chip {
         font-size: 12px; font-weight: 600;
         color: var(--md-tag); background: var(--md-tag-bg);
         border: 1px solid transparent; border-radius: 999px;
         padding: 4px 10px; cursor: pointer; transition: all .15s ease;
+        font-family: inherit;
       }
-      .tag-chip:hover { border-color: var(--md-primary-soft); }
+      .tag-chip:hover { border-color: var(--md-primary-soft); transform: translateY(-1px); }
       .tag-chip.active { background: var(--md-primary-deep); color: #fff; }
       .tag-chip .n { opacity: .7; margin-left: 2px; }
-      .sb-empty { padding: 14px; color: var(--md-muted); font-size: 12.5px; }
+
+      /* 今日动态 */
+      .welcome { display: flex; align-items: center; gap: 11px; padding: 13px 14px 4px; }
+      .welcome-ava {
+        flex: 0 0 auto; width: 42px; height: 42px; border-radius: 50%;
+        background: linear-gradient(135deg, var(--md-primary-soft), var(--md-primary-deep));
+        color: #fff; display: flex; align-items: center; justify-content: center;
+        font-size: 17px; font-weight: 800;
+        box-shadow: 0 4px 10px var(--md-primary-glow);
+      }
+      .welcome-hi { font-size: 14px; font-weight: 800; color: var(--md-title); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .welcome-sub { font-size: 12px; color: var(--md-sub); margin-top: 2px; }
+      .welcome-tip { font-size: 11.5px; color: var(--md-muted); line-height: 1.6; padding: 8px 14px 0; }
+      .owner-row { display: flex; flex-wrap: wrap; gap: 8px; padding: 11px 14px 14px; align-items: center; }
+      .owner-row .lbl { font-size: 11.5px; color: var(--md-muted); margin-right: 2px; }
+      .owner-chip {
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 3px 10px 3px 3px;
+        background: var(--md-card); border: 1px solid var(--md-border);
+        border-radius: 999px; cursor: pointer;
+        transition: transform .15s ease, border-color .15s ease,
+          box-shadow .15s ease, background .15s ease;
+      }
+      .owner-chip:hover { transform: translateY(-1px); border-color: var(--md-primary-soft); }
+      .owner-ava {
+        flex: 0 0 auto; width: 26px; height: 26px; border-radius: 50%;
+        display: inline-flex; align-items: center; justify-content: center;
+        color: #fff;
+      }
+      .owner-ava svg { width: 14px; height: 14px; }
+      .owner-name {
+        font-size: 12px; font-weight: 600; color: var(--md-title);
+        max-width: 96px; overflow: hidden; text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .owner-chip.active {
+        border-color: var(--md-primary);
+        box-shadow: 0 0 0 3px var(--md-primary-glow);
+        background: var(--md-primary-soft);
+      }
+      .owner-chip.active .owner-name { color: var(--md-primary-deep); }
 
       /* 右内容列 */
       .md-col { flex: 1 1 auto; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
@@ -301,7 +384,7 @@
       .md-count-line b { color: var(--md-primary-deep); font-weight: 700; }
 
       .md-list-area { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding-right: 4px; }
-      .md-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 15px; }
+      .md-grid { display: grid; grid-template-columns: repeat(auto-fill, 286px); justify-content: start; gap: 16px; }
 
       /* ---------- 卡片 ---------- */
       .md-kb-card {
@@ -310,17 +393,10 @@
         text-decoration: none; color: inherit;
         background: var(--md-card);
         border: 1px solid var(--md-border);
-        border-radius: 14px;
+        border-radius: 16px;
         overflow: hidden;
         box-shadow: var(--md-card-shadow);
         transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
-      }
-      .md-kb-card::before {
-        content: '';
-        position: absolute; top: 0; left: 0; right: 0; height: 3px;
-        background: linear-gradient(90deg, var(--md-primary-soft), var(--md-primary-deep));
-        opacity: .85;
-        z-index: 3;
       }
       .md-kb-card:hover { transform: translateY(-4px); box-shadow: var(--md-card-shadow-hover); border-color: var(--md-border-strong); background: var(--md-card-hover); }
       .md-kb-card.is-hidden { display: none; }
@@ -328,40 +404,72 @@
       .md-cover { position: relative; flex: 0 0 auto; overflow: hidden; }
       .md-cover .img-inner {
         width: 100%;
-        aspect-ratio: 16 / 8;
+        aspect-ratio: 16 / 9;
         display: flex; align-items: center; justify-content: center;
         background:
           radial-gradient(120% 140% at 20% 10%, var(--md-primary-soft) 0%, transparent 55%),
-          linear-gradient(135deg, #10b3a0, #103a43);
+          linear-gradient(135deg, #0ca678, #0b3b33);
       }
       .md-cover img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .4s ease; }
       .md-kb-card:hover .md-cover img { transform: scale(1.05); }
-      .md-cover .fallback { display: flex; align-items: center; justify-content: center; color: rgba(255,255,255,.92); transition: transform .4s ease; }
-      .md-kb-card:hover .md-cover .fallback { transform: scale(1.05); }
-      .md-cover .fallback svg { width: 40px; height: 40px; }
-      .md-cover-static-bg { position: absolute; inset: 0; }
+      .md-cover .img-inner { position: relative; }
+      .fallback-mark {
+        position: absolute; inset: 0;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 72px; font-weight: 900; line-height: 1;
+        color: rgba(255,255,255,.18);
+        letter-spacing: -1px;
+        transition: transform .4s ease, color .4s ease;
+        pointer-events: none; user-select: none;
+      }
+      .md-kb-card:hover .fallback-mark { transform: scale(1.08); color: rgba(255,255,255,.28); }
+      .md-cover-static-bg { position: absolute; inset: 0; overflow: hidden; }
+      .md-cover-static-bg::after {
+        content: ''; position: absolute; right: -34px; bottom: -44px;
+        width: 150px; height: 150px; border-radius: 50%;
+        background: rgba(255,255,255,.09);
+      }
+      .md-cover-static-bg::before {
+        content: ''; position: absolute; left: -22px; top: -32px;
+        width: 92px; height: 92px; border-radius: 50%;
+        background: rgba(255,255,255,.06);
+      }
       .md-cover-chip {
         position: absolute; top: 10px; left: 10px; z-index: 2;
         max-width: 56%;
         font-size: 11px; font-weight: 700; color: #fff;
-        background: rgba(0,0,0,.32);
-        border: 1px solid rgba(255,255,255,.25);
+        background: rgba(0,0,0,.34);
+        border: 1px solid rgba(255,255,255,.28);
         backdrop-filter: blur(5px);
         padding: 2px 9px; border-radius: 999px;
         white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
       }
-      .md-cover-count {
+      .md-like-btn {
         position: absolute; top: 10px; right: 10px; z-index: 2;
-        display: inline-flex; align-items: center; gap: 4px;
-        font-size: 11px; font-weight: 600; color: #fff;
-        background: rgba(0,0,0,.32);
-        border: 1px solid rgba(255,255,255,.25);
+        width: 28px; height: 28px;
+        display: inline-flex; align-items: center; justify-content: center;
+        background: rgba(0,0,0,.34);
+        border: 1px solid rgba(255,255,255,.28);
         backdrop-filter: blur(5px);
-        padding: 2px 8px; border-radius: 999px;
+        border-radius: 8px; cursor: pointer; color: #fff;
+        transition: background .15s ease, border-color .15s ease, transform .15s ease;
+        outline: none;
       }
-      .md-cover-count svg { width: 12px; height: 12px; }
+      .md-like-btn svg { width: 14px; height: 14px; fill: none; transition: fill .15s ease; }
+      .md-like-btn:hover { background: #f43f5e; border-color: transparent; transform: scale(1.06); }
+      .md-like-btn:hover svg { fill: currentColor; }
+      .md-like-btn:focus-visible { box-shadow: 0 0 0 3px rgba(255,255,255,.45); }
+      .md-like-btn.active { background: #f43f5e; border-color: transparent; }
+      .md-like-btn.active svg { fill: currentColor; }
+      .md-like-btn.popping svg { animation: md-heart-pop .55s ease; }
+      @keyframes md-heart-pop {
+        0% { transform: scale(1); }
+        30% { transform: scale(1.35); }
+        55% { transform: scale(.9); }
+        100% { transform: scale(1); }
+      }
 
-      .md-body { padding: 12px 14px 0; display: flex; flex-direction: column; flex: 1 1 auto; }
+      .md-body { padding: 13px 15px 0; display: flex; flex-direction: column; flex: 1 1 auto; }
       .md-title-row { display: flex; align-items: flex-start; gap: 6px; }
       .md-title { margin: 0 0 6px; flex: 1 1 auto; min-width: 0; font-size: 15px; font-weight: 800; color: var(--md-title); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: 38px; }
       .md-title-badge {
@@ -376,23 +484,28 @@
       .md-tags { display: flex; flex-wrap: wrap; gap: 5px; min-height: 20px; padding: 9px 0 3px; }
       .md-tag { font-size: 11px; font-weight: 600; color: var(--md-tag); background: var(--md-tag-bg); border-radius: 999px; padding: 2px 8px; }
 
-      .md-foot { display: flex; align-items: center; gap: 8px; margin-top: 8px; padding: 9px 14px 11px; border-top: 1px dashed var(--md-border); }
+      .md-foot { display: flex; align-items: center; gap: 8px; margin-top: 8px; padding: 9px 15px 12px; border-top: 1px dashed var(--md-border); }
       .md-owner { display: inline-flex; align-items: center; gap: 6px; min-width: 0; font-size: 12px; font-weight: 600; color: var(--md-sub); }
-      .md-owner .dot { flex: 0 0 auto; width: 18px; height: 18px; border-radius: 50%; background: linear-gradient(135deg, var(--md-primary-soft), var(--md-primary-deep)); display: inline-flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 800; color: #fff; overflow: hidden; }
+      .md-owner .dot { flex: 0 0 auto; width: 19px; height: 19px; border-radius: 50%; background: linear-gradient(135deg, var(--md-primary-soft), var(--md-primary-deep)); display: inline-flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 800; color: #fff; overflow: hidden; }
       .md-owner .nm { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       .md-foot-meta { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; flex: 0 0 auto; color: var(--md-muted); }
       .md-time { font-size: 11.5px; }
 
       /* ---------- 列表视图 ---------- */
       .md-grid.is-list { grid-template-columns: 1fr; gap: 9px; }
-      .md-grid.is-list .md-kb-card { flex-direction: row; align-items: stretch; }
-      .md-grid.is-list .md-cover { flex: 0 0 150px; }
-      .md-grid.is-list .img-inner { aspect-ratio: auto; height: 100%; }
-      .md-grid.is-list .md-body { flex: 1 1 auto; min-width: 0; padding: 11px 16px 8px; }
-      .md-grid.is-list .md-title { min-height: 0; }
-      .md-grid.is-list .md-desc { min-height: 0; }
-      .md-grid.is-list .md-foot { flex: 0 0 auto; flex-direction: column; align-items: flex-end; justify-content: center; gap: 8px; margin-top: 0; border-top: none; border-left: 1px dashed var(--md-border); padding: 10px 16px; min-width: 118px; }
-      .md-grid.is-list .md-foot-meta { margin-left: 0; }
+      .md-grid.is-list .md-kb-card { flex-direction: row; align-items: center; }
+      .md-grid.is-list .md-cover { flex: 0 0 132px; }
+      .md-grid.is-list .img-inner { aspect-ratio: auto; height: 100%; min-height: 96px; }
+      .md-grid.is-list .fallback-mark { font-size: 44px; }
+      .md-grid.is-list .md-cover-static-bg::after { width: 90px; height: 90px; right: -24px; bottom: -30px; }
+      .md-grid.is-list .md-cover-static-bg::before { width: 56px; height: 56px; }
+      .md-grid.is-list .md-like-btn { top: 8px; right: 8px; }
+      .md-grid.is-list .md-body { flex: 1 1 auto; min-width: 0; padding: 12px 16px 12px; display: flex; flex-direction: column; justify-content: center; gap: 5px; }
+      .md-grid.is-list .md-title { min-height: 0; margin: 0; -webkit-line-clamp: 1; }
+      .md-grid.is-list .md-desc { min-height: 0; -webkit-line-clamp: 1; margin: 0; }
+      .md-grid.is-list .md-tags { min-height: 0; padding: 0; }
+      .md-grid.is-list .md-foot { flex: 0 0 auto; align-self: center; flex-direction: row; align-items: center; gap: 8px; margin-top: 0; border-top: none; border-left: 1px dashed var(--md-border); border-radius: 0; padding: 10px 16px; }
+      .md-grid.is-list .md-foot .md-foot-meta { margin-left: 0; flex-direction: column; align-items: flex-end; gap: 2px; }
 
       /* ---------- 分页 ---------- */
       .md-pager-wrap { flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--md-border); }
@@ -418,18 +531,32 @@
         text-align: center; color: var(--md-muted);
         min-height: 240px; padding: 40px 20px; font-size: 14px;
       }
-      .md-empty svg { width: 46px; height: 46px; margin-bottom: 14px; opacity: .5; }
+      .md-empty svg { width: 48px; height: 48px; margin-bottom: 14px; opacity: .45; }
       .md-empty .md-empty-text { max-width: 340px; line-height: 1.7; }
+      .md-empty-btn {
+        display: none;
+        margin-top: 14px; border: none; cursor: pointer;
+        font-family: inherit; font-size: 13px; font-weight: 600; color: #fff;
+        background: linear-gradient(135deg, var(--md-primary-soft), var(--md-primary-deep));
+        border-radius: 8px; padding: 8px 20px;
+        box-shadow: 0 4px 12px var(--md-primary-glow);
+      }
 
       @media (max-width: 1080px) {
-        .md-stats { grid-template-columns: repeat(3, 1fr); }
         .md-sidebar { display: none; }
+        .md-stat { padding: 10px 12px; gap: 9px; border-radius: 12px; }
+        .md-stat-ico { width: 32px; height: 32px; border-radius: 9px; }
+        .md-stat-ico svg { width: 17px; height: 17px; }
+        .md-stat-val { font-size: 18px; }
+        .md-stat-val.is-text { font-size: 12.5px; }
+        .md-stat-label { font-size: 11px; margin-top: 2px; }
       }
       @media (max-width: 640px) {
         .md-content { padding: 12px 12px 8px; }
         .md-toolbar { flex-wrap: wrap; }
         .md-search { flex: 1 1 100%; }
-        .md-stats { grid-template-columns: repeat(2, 1fr); }
+        .md-stats { display: flex; overflow-x: auto; gap: 10px; padding-bottom: 2px; }
+        .md-stat { flex: 0 0 auto; min-width: 150px; }
       }
     </style>
   </th:block>
@@ -455,35 +582,31 @@
       <div class="md-content">
         <div class="md-stats">
           <div class="md-stat">
-            <span class="md-stat-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></span>
+            <span class="md-stat-ico is-green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></span>
             <div style="min-width:0"><div class="md-stat-val" id="md-stat-kb">0</div><div class="md-stat-label">知识库总数</div></div>
           </div>
           <div class="md-stat">
-            <span class="md-stat-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 13h6M9 17h4"/></svg></span>
-            <div style="min-width:0"><div class="md-stat-val" id="md-stat-docs">0</div><div class="md-stat-label">总文档数</div></div>
+            <span class="md-stat-ico is-blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 13h6M9 17h4"/></svg></span>
+            <div style="min-width:0"><div class="md-stat-val" id="md-stat-docs">0</div><div class="md-stat-label">笔记总数</div></div>
           </div>
           <div class="md-stat">
-            <span class="md-stat-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><circle cx="7" cy="7" r=".5" fill="currentColor"/></svg></span>
-            <div style="min-width:0"><div class="md-stat-val" id="md-stat-tags">0</div><div class="md-stat-label">分类标签</div></div>
+            <span class="md-stat-ico is-purple"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg></span>
+            <div style="min-width:0"><div class="md-stat-val" id="md-stat-tags">0</div><div class="md-stat-label">标签数量</div></div>
           </div>
           <div class="md-stat">
-            <span class="md-stat-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span>
-            <div style="min-width:0"><div class="md-stat-val" id="md-stat-avg">0</div><div class="md-stat-label">平均文档/库</div></div>
+            <span class="md-stat-ico is-orange"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></span>
+            <div style="min-width:0"><div class="md-stat-val" id="md-stat-avg">0</div><div class="md-stat-label">访问量</div></div>
           </div>
           <div class="md-stat">
-            <span class="md-stat-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12l2.5-2.5L8 12l3-3 3 3 2-2 3 3"/><path d="M4 20h16"/><path d="M4 20V8"/></svg></span>
-            <div style="min-width:0"><div class="md-stat-val is-text" id="md-stat-hot" title="">-</div><div class="md-stat-label">最热知识库</div></div>
-          </div>
-          <div class="md-stat">
-            <span class="md-stat-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg></span>
-            <div style="min-width:0"><div class="md-stat-val is-text" id="md-stat-new">-</div><div class="md-stat-label">最近更新</div></div>
+            <span class="md-stat-ico is-green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg></span>
+            <div style="min-width:0"><div class="md-stat-val" id="md-stat-new">0</div><div class="md-stat-label">点赞量</div></div>
           </div>
         </div>
 
         <div class="md-toolbar">
           <div class="md-sec-title">
             <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-6 9 6v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9z"/><path d="M9 21V12h6v9"/></svg></span>
-            <span>知识库中心</span>
+            <span>全部知识库</span>
           </div>
           <div class="md-search">
             <svg class="lens" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.1" y2="16.1"></line></svg>
@@ -512,15 +635,16 @@
           <aside class="md-sidebar">
             <div class="sb-card">
               <div class="sb-head">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12l2.5-2.5L8 12l3-3 3 3 2-2 3 3"/><path d="M4 20h16"/></svg>
-                最新更新
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+                最近更新
+                <button type="button" class="sb-more" id="sb-recent-more">查看全部</button>
               </div>
               <div class="sb-list" id="sb-recent"></div>
             </div>
 
             <div class="sb-card">
               <div class="sb-head">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18 15 15 0 0 1 0-18z"/></svg>
+                <svg class="h-purple" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><circle cx="7" cy="7" r=".5" fill="currentColor"/></svg>
                 标签分类
               </div>
               <div class="tag-cloud" id="sb-tags"></div>
@@ -528,10 +652,18 @@
 
             <div class="sb-card">
               <div class="sb-head">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-                贡献者
+                <svg class="h-orange" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="M4.93 4.93l1.41 1.41"/><path d="M17.66 17.66l1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="M4.93 19.07l1.41-1.41"/><path d="M17.66 6.34l1.41-1.41"/></svg>
+                今日动态
               </div>
-              <div class="sb-list" id="sb-owners"></div>
+              <div class="welcome">
+                <span class="welcome-ava" id="welcome-ava">友</span>
+                <div style="min-width:0">
+                  <div class="welcome-hi" id="welcome-name">朋友</div>
+                  <div class="welcome-sub">欢迎回来!</div>
+                </div>
+              </div>
+              <div class="welcome-tip" id="welcome-tip"></div>
+              <div class="owner-row" id="sb-owners"></div>
             </div>
           </aside>
 
@@ -551,7 +683,10 @@
                      data-tags=${kb.spec.tags != null ? #strings.listJoin(kb.spec.tags, ' ') : ''},
                      data-owner=${kb.spec.creatorName != null ? kb.spec.creatorName : ''},
                      data-name=${#strings.toLowerCase(kb.spec.displayName)},
+                     data-slug=${kb.spec.slug != null && !kb.spec.slug.isEmpty() ? kb.spec.slug : kb.metadata.name},
                      data-docs=${kb.status != null and kb.status.docCount != null ? kb.status.docCount : 0},
+                     data-access=${kb.spec.accessCount != null ? kb.spec.accessCount : 0},
+                     data-like=${kb.spec.likeCount != null ? kb.spec.likeCount : 0},
                      data-update=${kb.spec.updateTime != null ? kb.spec.updateTime : ''},
                      data-created=${kb.spec.creationTime != null ? kb.spec.creationTime : ''}"
                    th:href="@{'/docs/view/' +
@@ -565,34 +700,38 @@
                        th:unless="${kb.spec.cover != null and !kb.spec.cover.isEmpty()}">
                     <span class="md-cover-static-bg" aria-hidden="true"></span>
                     <div class="img-inner">
-                      <span class="fallback">
-                        <svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-                          <path d="M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zM9 6v2h6V6H9zm0 5c-.6 0-1 .4-1 1s.4 1 1 1h6a1 1 0 0 0 0-2H9zm0 4c-.6 0-1 .4-1 1s.4 1 1 1h4a1 1 0 0 0 0-2H9z" fill="currentColor"/>
-                        </svg>
-                      </span>
+                      <span class="fallback-mark"
+                            th:text="${!#strings.isEmpty(kb.spec.displayName) ? #strings.substring(kb.spec.displayName, 0, 1) : '库'}">库</span>
                     </div>
                   </div>
                   <span class="md-cover-chip"
                         th:if="${kb.spec.tags != null and !kb.spec.tags.isEmpty()}"
                         th:text="${kb.spec.tags[0]}"></span>
-                  <span class="md-cover-count">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
-                    <span th:text="${kb.status != null and kb.status.docCount != null ? kb.status.docCount : 0}">0</span>
+                  <span class="md-like-btn" role="button" tabindex="0" aria-label="点赞这个知识库" title="点赞">
+                    <svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
                   </span>
                   <div class="md-body">
                     <div class="md-title-row">
                       <h3 class="md-title" th:text="${kb.spec.displayName}"></h3>
-                      <span class="md-title-badge">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+                      <span class="md-title-badge" title="包含文档数">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
                         <span th:text="${kb.status != null and kb.status.docCount != null ? kb.status.docCount : 0}">0</span>
+                      </span>
+                      <span class="md-title-badge" title="访问量">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                        <span th:text="${kb.spec.accessCount != null ? kb.spec.accessCount : 0}">0</span>
+                      </span>
+                      <span class="md-title-badge md-like-badge" title="点赞量">
+                        <svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+                        <span th:text="${kb.spec.likeCount != null ? kb.spec.likeCount : 0}">0</span>
                       </span>
                     </div>
                     <p class="md-desc" th:text="${kb.spec.description != null and !kb.spec.description.isEmpty() ? kb.spec.description : '暂无简介'}">暂无简介</p>
                   </div>
                   <div class="md-foot">
                     <span class="md-owner">
-                      <span class="dot" th:text="${kb.spec.creatorName != null ? #strings.substring(kb.spec.creatorName, 0, 1) : ''}"></span>
-                      <span class="nm" th:text="${kb.spec.creatorName}"></span>
+                      <span class="dot" th:text="${kb.spec.creatorName != null && !#strings.isEmpty(kb.spec.creatorName) ? #strings.substring(kb.spec.creatorName, 0, 1) : '匿'}"></span>
+                      <span class="nm" th:text="${kb.spec.creatorName != null && !#strings.isEmpty(kb.spec.creatorName) ? kb.spec.creatorName : '匿名'}"></span>
                     </span>
                     <span class="md-foot-meta">
                       <time class="md-time" th:attr="datetime=${kb.spec.updateTime}"></time>
@@ -601,8 +740,9 @@
                 </a>
 
                 <div class="md-empty" id="md-empty" style="display:none">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><circle cx="7" cy="7" r=".5" fill="currentColor"/></svg>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
                   <span class="md-empty-text">暂无公开知识库，去管理后台创建第一个吧。</span>
+                  <button type="button" class="md-empty-btn" id="md-empty-reset">清除筛选条件</button>
                 </div>
               </div>
             </div>
@@ -624,20 +764,19 @@
         var state = { q: '', tag: '', owner: '', sort: 'update', page: 1, perPage: 9, view: 'card' };
 
         var PALETTE = [
+          'linear-gradient(135deg,#e11d48,#fb7185)',
           'linear-gradient(135deg,#0f766e,#14b8a6)',
-          'linear-gradient(135deg,#0e7490,#22d3ee)',
-          'linear-gradient(135deg,#4f46e5,#38bdf8)',
-          'linear-gradient(135deg,#7c3aed,#f472b6)',
+          'linear-gradient(135deg,#4f46e5,#818cf8)',
+          'linear-gradient(135deg,#0284c7,#38bdf8)',
+          'linear-gradient(135deg,#059669,#34d399)',
           'linear-gradient(135deg,#b45309,#f59e0b)',
+          'linear-gradient(135deg,#7c3aed,#c084fc)',
           'linear-gradient(135deg,#15803d,#4ade80)',
-          'linear-gradient(135deg,#be123c,#fb7185)',
-          'linear-gradient(135deg,#334155,#64748b)',
-          'linear-gradient(135deg,#0f172a,#0f766e)'
+          'linear-gradient(135deg,#334155,#94a3b8)'
         ];
         function hash(s) { var h = 0; for (var i = 0; i < s.length; i++) { h = (h * 31 + s.charCodeAt(i)) | 0; } return Math.abs(h); }
         function pad(n) { return n < 10 ? '0' + n : n; }
         function nowDate() { return new Date(); }
-        function enc(_s) { try { return encodeURIComponent(_s); } catch (e) { return _s; } }
 
         /* 准备卡片数据缓存 */
         var cards = all.map(function (c) {
@@ -648,9 +787,12 @@
             owner: c.dataset.owner || '',
             name: c.dataset.name || '',
             docs: parseInt(c.dataset.docs || '0', 10),
+            access: parseInt(c.dataset.access || '0', 10),
+            like: parseInt(c.dataset.like || '0', 10),
             update: Date.parse(c.dataset.update || '') || 0,
             created: Date.parse(c.dataset.created || '') || 0,
-            href: c.getAttribute('href')
+            href: c.getAttribute('href'),
+            title: c.querySelector('.md-title') ? c.querySelector('.md-title').textContent : ''
           };
         });
 
@@ -664,6 +806,48 @@
           if (d.getFullYear() === now.getFullYear()) return pad(d.getMonth() + 1) + '-' + pad(d.getDate());
           return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
         }
+
+        /* ---- 点赞（一次性；与阅读页共用 localStorage 键，匿名也可点赞） ---- */
+        function likeKey(slug) { return 'minidocs:like:' + slug; }
+        function locallyLiked(slug) {
+          try { return localStorage.getItem(likeKey(slug)) === '1'; } catch (e) { return false; }
+        }
+        cards.forEach(function (card) {
+          var btn = card.el.querySelector('.md-like-btn');
+          if (!btn) return;
+          var slug = card.el.getAttribute('data-slug') || '';
+          if (!slug) return;
+          var badge = card.el.querySelector('.md-like-badge span');
+          function markLiked() {
+            btn.classList.add('active');
+            btn.classList.remove('popping');
+            void btn.offsetWidth;
+            btn.classList.add('popping');
+          }
+          if (locallyLiked(slug)) btn.classList.add('active');
+          btn.setAttribute('aria-label', '点赞：' + card.title);
+          btn.setAttribute('title', '点赞：' + card.title);
+          function doLike() {
+            if (locallyLiked(slug)) { markLiked(); return; }
+            fetch('/apis/api.minidocs.halo.run/v1alpha1/knowledgebases/'
+                + encodeURIComponent(slug) + '/like', { method: 'POST', credentials: 'include' })
+              .then(function (r) { if (!r.ok) throw 0; return r.json(); })
+              .then(function (data) {
+                try { localStorage.setItem(likeKey(slug), '1'); } catch (e) { /* 忽略隐私模式 */ }
+                markLiked();
+                if (data && typeof data.likeCount === 'number') {
+                  if (badge) badge.textContent = data.likeCount;
+                  var stat = document.getElementById('md-stat-new');
+                  if (stat) stat.textContent = (parseInt(stat.textContent, 10) || 0) + 1;
+                }
+              })
+              .catch(function () { /* 点赞失败静默 */ });
+          }
+          btn.addEventListener('click', function (e) { e.preventDefault(); e.stopPropagation(); doLike(); });
+          btn.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); doLike(); }
+          });
+        });
 
         /* 无封面渐变 + 时间 */
         cards.forEach(function (card) {
@@ -684,18 +868,14 @@
         });
         var tagList = Object.keys(tagCounter).sort(function (a, b) { return tagCounter[b] - tagCounter[a] || a.localeCompare(b); });
         var ownerList = Object.keys(ownerCounter).sort(function (a, b) { return ownerCounter[b] - ownerCounter[a] || a.localeCompare(b); });
-        var hot = cards.slice().sort(function (a, b) { return b.docs - a.docs; })[0];
-        var latestUpdate = cards.reduce(function (mx, c) { return c.update > mx ? c.update : mx; }, 0);
+        var totalAccess = cards.reduce(function (s, c) { return s + c.access; }, 0);
+        var totalLike = cards.reduce(function (s, c) { return s + c.like; }, 0);
 
         document.getElementById('md-stat-kb').textContent = totalKb;
         document.getElementById('md-stat-docs').textContent = totalDocs;
         document.getElementById('md-stat-tags').textContent = tagList.length;
-        document.getElementById('md-stat-avg').textContent = totalKb ? Math.round(totalDocs / totalKb * 10) / 10 : 0;
-        var hotEl = document.getElementById('md-stat-hot');
-        hotEl.textContent = hot && totalKb ? hot.el.querySelector('.md-title').textContent : '-';
-        hotEl.title = hot && totalKb ? hot.name : '';
-        var newEl = document.getElementById('md-stat-new');
-        newEl.textContent = latestUpdate ? relTime(new Date(latestUpdate).toISOString(), '-') : '-';
+        document.getElementById('md-stat-avg').textContent = totalAccess;
+        document.getElementById('md-stat-new').textContent = totalLike;
 
         /* ---- 侧栏：标签云 ---- */
         var tagCloud = document.getElementById('sb-tags');
@@ -705,7 +885,8 @@
             var chip = document.createElement('button');
             chip.type = 'button';
             chip.className = 'tag-chip';
-            chip.innerHTML = enc(tag) + '<span class="n">' + tagCounter[tag] + '</span>';
+            chip.setAttribute('data-tag', tag);
+            chip.innerHTML = tag + '<span class="n">' + tagCounter[tag] + '</span>';
             chip.addEventListener('click', function () {
               state.tag = state.tag === tag ? '' : tag;
               state.page = 1;
@@ -714,55 +895,84 @@
               });
               render();
             });
-            chip.setAttribute('data-tag', tag);
-            chip.innerHTML = tag + '<span class="n">' + tagCounter[tag] + '</span>';
             tagCloud.appendChild(chip);
           });
         }
 
-        /* ---- 侧栏：最新更新 ---- */
+        /* ---- 侧栏：最近更新 ---- */
         var recentEl = document.getElementById('sb-recent');
         if (recentEl) {
-          var recent = cards.slice().sort(function (a, b) { return b.update - a.update; }).slice(0, 6).filter(function (c) { return c.update > 0; });
+          var recent = cards.slice().sort(function (a, b) { return b.update - a.update; }).slice(0, 5).filter(function (c) { return c.update > 0; });
           if (!recent.length) recentEl.innerHTML = '<div class="sb-empty">暂无数据</div>';
           else recent.forEach(function (c) {
             var a = document.createElement('a');
             a.className = 'sb-item';
             a.href = c.href;
-            var t = document.createElement('div'); t.className = 't'; t.textContent = c.el.querySelector('.md-title').textContent;
-            var m = document.createElement('div'); m.className = 'm';
-            m.textContent = c.docs + ' 篇文档 · ' + relTime(new Date(c.update).toISOString(), '');
-            a.appendChild(t); a.appendChild(m);
+            a.innerHTML =
+              '<span class="sb-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></span>' +
+              '<span class="sb-txt">' +
+              '<span class="t"></span>' +
+              '<span class="m"><i class="live"></i>' + c.docs + ' 篇 · ' + relTime(new Date(c.update).toISOString(), '') + '</span>' +
+              '</span>';
+            a.querySelector('.t').textContent = c.title;
             recentEl.appendChild(a);
           });
         }
 
-        /* ---- 侧栏：贡献者 ---- */
+        /* ---- 侧栏：今日动态（欢迎 + 贡献者） ---- */
+        var navNameEl = document.querySelector('.nav-user .name');
+        var navName = navNameEl ? (navNameEl.textContent || '').trim() : '';
+        var who = (navName && navName !== '未登录') ? navName : (ownerList[0] || '朋友');
+        var wa = document.getElementById('welcome-ava');
+        var wn = document.getElementById('welcome-name');
+        if (wa) wa.textContent = (who.charAt(0) || '友').toUpperCase();
+        if (wn) wn.textContent = who;
+
+        var dayStart = new Date(); dayStart.setHours(0, 0, 0, 0);
+        var todayCount = cards.filter(function (c) { return c.update >= dayStart.getTime(); }).length;
+        var tipEl = document.getElementById('welcome-tip');
+        if (tipEl) {
+          var tip = todayCount ? ('今日更新 <b style="color:var(--md-primary-deep)">' + todayCount + '</b> 个知识库') : '今天还没有新的更新';
+          tip += ' · 共 ' + totalDocs + ' 篇文档';
+          tipEl.innerHTML = tip;
+        }
+
         var ownersEl = document.getElementById('sb-owners');
         if (ownersEl) {
           if (!ownerList.length) ownersEl.innerHTML = '<div class="sb-empty">暂无数据</div>';
-          else ownerList.forEach(function (owner) {
-            var item = document.createElement('div');
-            item.className = 'sb-item sb-owner';
-            item.setAttribute('data-owner', owner);
-            item.innerHTML =
-              '<span class="dot">' + (owner.charAt(0) || '?').toUpperCase() + '</span>' +
-              '<span class="meta"><span class="t">' + owner + '</span>' +
-              '<span class="m">' + ownerCounter[owner] + ' 个知识库</span></span>';
-            item.addEventListener('click', function () {
-              state.owner = state.owner === owner ? '' : owner;
-              state.page = 1;
-              document.querySelectorAll('.sb-owner').forEach(function (o) {
-                o.classList.toggle('active', o.getAttribute('data-owner') === state.owner);
+          else {
+            var lbl = document.createElement('span');
+            lbl.className = 'lbl';
+            lbl.textContent = '贡献者';
+            ownersEl.appendChild(lbl);
+            ownerList.forEach(function (owner, i) {
+              var chip = document.createElement('span');
+              chip.className = 'owner-chip';
+              chip.setAttribute('data-owner', owner);
+              chip.setAttribute('role', 'button');
+              chip.setAttribute('tabindex', '0');
+              chip.title = owner + ' · ' + ownerCounter[owner] + ' 个知识库';
+              var ava = document.createElement('span');
+              ava.className = 'owner-ava';
+              ava.style.background = PALETTE[i % PALETTE.length];
+              ava.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>';
+              var name = document.createElement('span');
+              name.className = 'owner-name';
+              name.textContent = owner;
+              chip.appendChild(ava);
+              chip.appendChild(name);
+              chip.addEventListener('click', function () {
+                state.owner = state.owner === owner ? '' : owner;
+                state.page = 1;
+                document.querySelectorAll('.owner-chip').forEach(function (o) {
+                  o.classList.toggle('active', o.getAttribute('data-owner') === state.owner);
+                });
+                render();
               });
-              render();
+              ownersEl.appendChild(chip);
             });
-            ownersEl.appendChild(item);
-          });
+          }
         }
-        var ownerCss = document.createElement('style');
-        ownerCss.textContent = '.sb-owner.active{background:var(--md-primary-glow)}';
-        document.head.appendChild(ownerCss);
 
         /* ---- 筛选 / 排序 / 分页 ---- */
         function matches(c) {
@@ -783,6 +993,7 @@
         var countEl = document.getElementById('md-count');
         var countTotalEl = document.getElementById('md-count-total');
         var emptyEl = document.getElementById('md-empty');
+        var emptyBtn = document.getElementById('md-empty-reset');
         var listArea = document.getElementById('md-list-area');
         var pagerEl = document.getElementById('md-pager');
         var gridEl = document.getElementById('md-grid');
@@ -814,6 +1025,7 @@
               }
             }
           }
+          if (emptyBtn) emptyBtn.style.display = (state.q || state.tag || state.owner) ? 'inline-flex' : 'none';
           buildPager(pages);
           /* 按当前排序/筛选物理重排卡片节点，使顺序变化在视觉上可见 */
           var order = shown.map(function (c) { return c.el; });
@@ -852,7 +1064,7 @@
           else {
             num(1, cur === 1);
             if (cur > 3) sep();
-            for (var i = Math.max(2, cur - 1); i <= Math.min(pages - 1, cur + 1); i++) num(i, i === cur);
+            for (var j = Math.max(2, cur - 1); j <= Math.min(pages - 1, cur + 1); j++) num(j, j === cur);
             if (cur < pages - 2) sep();
             num(pages, cur === pages);
           }
@@ -862,6 +1074,15 @@
           buttons.forEach(function (b) { pagerEl.appendChild(b); });
         }
 
+        /* 清除全部筛选 */
+        function resetFilters() {
+          state.q = ''; state.tag = ''; state.owner = ''; state.page = 1;
+          input.value = '';
+          document.querySelectorAll('.tag-chip').forEach(function (b) { b.classList.remove('active'); });
+          document.querySelectorAll('.owner-chip').forEach(function (o) { o.classList.remove('active'); });
+          render();
+        }
+
         /* 搜索 */
         var input = document.getElementById('md-search-input');
         input.addEventListener('input', function () { state.q = input.value.trim().toLowerCase(); state.page = 1; render(); });
@@ -869,6 +1090,11 @@
 
         /* 排序 */
         document.getElementById('md-sort').addEventListener('change', function (e) { state.sort = e.target.value; state.page = 1; render(); });
+
+        /* 查看全部 / 清除筛选 */
+        var moreBtn = document.getElementById('sb-recent-more');
+        if (moreBtn) moreBtn.addEventListener('click', resetFilters);
+        if (emptyBtn) emptyBtn.addEventListener('click', resetFilters);
 
         /* 视图切换 */
         var viewBtns = document.querySelectorAll('.md-view button');

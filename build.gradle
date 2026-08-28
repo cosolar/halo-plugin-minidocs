@@ -4,7 +4,7 @@ plugins {
     id "run.halo.plugin.devtools" version "0.6.0"
 }
 
-group = 'run.halo.plugin.minidocs'
+group = 'cn.minims.minidocs'
 description = 'A knowledge base plugin for Halo'
 // devtools 的 generatePluginComponentsIdx 等任务要求项目版本已设置
 version = '1.0.0'

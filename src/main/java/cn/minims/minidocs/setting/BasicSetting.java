@@ -1,4 +1,4 @@
-package run.halo.plugin.minidocs.setting;
+package cn.minims.minidocs.setting;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 

@@ -1,4 +1,4 @@
-package run.halo.plugin.minidocs.extension;
+package cn.minims.minidocs.extension;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.Instant;
@@ -46,9 +46,6 @@ public class KnowledgeBase extends AbstractExtension {
         @Schema(description = "知识库描述")
         private String description;
 
-        @Schema(description = "知识库图标")
-        private String logo;
-
         @Schema(description = "是否公开可见", defaultValue = "false")
         private Boolean publicVisible = false;
 
@@ -67,11 +64,35 @@ public class KnowledgeBase extends AbstractExtension {
         @Schema(description = "创建时间（创建时由系统自动写入）")
         private Instant creationTime;
 
+        @Schema(description = "知识库图标地址")
+        private String logo;
+
         @Schema(description = "封面图片地址")
         private String cover;
 
         @Schema(description = "最后一次更新时间")
         private Instant updateTime;
+
+        @Schema(description = "访问量（每次打开阅读页 +1）", defaultValue = "0")
+        private Long accessCount = 0L;
+
+        @Schema(description = "点赞数")
+        private Long likeCount = 0L;
+
+        @Schema(description = "已点赞用户名列表（用于点赞去重与取消点赞）")
+        private List<String> likedUsers;
+
+        @Schema(description = "是否开启外链分享（null 表示未提交，更新时沿用旧值）")
+        private Boolean shareEnabled;
+
+        @Schema(description = "分享外链标识（随机 token，用于 /docs/share/{shareToken}）")
+        private String shareToken;
+
+        @Schema(description = "分享访问密码（为空表示无密码访问）")
+        private String sharePassword;
+
+        @Schema(description = "分享有效期截止时间（为空表示永久有效）")
+        private Instant shareExpiresAt;
     }
 
     @Data

@@ -19,6 +19,7 @@ import {
   IconRiPencilFill,
   IconSave,
   IconSendPlaneFill,
+  IconRefreshLine,
   IconDeleteBin,
   IconClipboardLine,
   IconSettings,
@@ -820,6 +821,22 @@ async function renderAndSaveContent(
   }
 }
 
+async function unpublishDoc() {
+  const currentName = selected.value;
+  if (!currentName) {
+    return;
+  }
+  await axiosInstance.post(
+    `${API_PREFIX}/knowledgebases/${kbName}/docs/${currentName.name}/unpublish`
+  );
+  Toast.success("已取消发布");
+  if (doc.value) {
+    doc.value.spec.phase = "draft";
+    doc.value.spec.publishTime = undefined;
+  }
+  await loadTree();
+}
+
 function openMoveModal() {
   if (!selected.value || !doc.value) {
     return;
@@ -1371,7 +1388,17 @@ onMounted(async () => {
                 保存
               </VButton>
               <VButton
-                v-if="doc.spec.phase !== 'published'"
+                v-if="doc.spec.phase === 'published'"
+                size="sm"
+                @click="unpublishDoc"
+              >
+                <template #icon>
+                  <IconRefreshLine class="h-4 w-4" />
+                </template>
+                取消发布
+              </VButton>
+              <VButton
+                v-else
                 size="sm"
                 @click="publishDoc"
               >

@@ -1,4 +1,4 @@
-package run.halo.plugin.minidocs.endpoint;
+package cn.minims.minidocs.endpoint;
 
 import java.security.Principal;
 import java.time.LocalDateTime;
@@ -22,16 +22,17 @@ import org.springframework.web.reactive.function.server.ServerResponse;
 import reactor.core.publisher.Mono;
 import run.halo.app.core.extension.endpoint.CustomEndpoint;
 import run.halo.app.extension.GroupVersion;
+import run.halo.app.extension.ListResult;
 import run.halo.app.plugin.ReactiveSettingFetcher;
-import run.halo.plugin.minidocs.extension.KnowledgeBase;
-import run.halo.plugin.minidocs.setting.BasicSetting;
-import run.halo.plugin.minidocs.service.KnowledgeBaseDocService;
-import run.halo.plugin.minidocs.service.KnowledgeBaseService;
+import cn.minims.minidocs.extension.KnowledgeBase;
+import cn.minims.minidocs.setting.BasicSetting;
+import cn.minims.minidocs.service.KnowledgeBaseDocService;
+import cn.minims.minidocs.service.KnowledgeBaseService;
 
 import static org.springframework.web.reactive.function.server.RequestPredicates.accept;
 import static org.springframework.web.reactive.function.server.RouterFunctions.route;
 
-import run.halo.plugin.minidocs.endpoint.KnowledgeBaseStatsDto;
+import cn.minims.minidocs.endpoint.KnowledgeBaseStatsDto;
 
 /**
  * 知识库 Console 管理端点。
@@ -79,13 +80,13 @@ public class KnowledgeBaseConsoleEndpoint implements CustomEndpoint {
         var page = request.queryParam("page").map(Integer::parseInt).orElse(1);
         var size = request.queryParam("size").map(Integer::parseInt).orElse(20);
         var sortBy = request.queryParam("sortBy").orElse("updateTime");
-        return knowledgeBaseService.list(keyword, publicVisible, sortBy, page, size)
+        return knowledgeBaseService.listAccessible(keyword, publicVisible, sortBy, page, size)
             .flatMap(result -> ServerResponse.ok().bodyValue(result));
     }
 
     private Mono<ServerResponse> getKnowledgeBase(ServerRequest request) {
         var name = request.pathVariable("name");
-        return knowledgeBaseService.get(name)
+        return knowledgeBaseService.requireAccessByName(name)
             .flatMap(kb -> ServerResponse.ok().bodyValue(kb));
     }
 
@@ -101,14 +102,16 @@ public class KnowledgeBaseConsoleEndpoint implements CustomEndpoint {
 
     private Mono<ServerResponse> updateKnowledgeBase(ServerRequest request) {
         var name = request.pathVariable("name");
-        return request.bodyToMono(KnowledgeBase.class)
-            .flatMap(update -> knowledgeBaseService.update(name, update))
-            .flatMap(kb -> ServerResponse.ok().bodyValue(kb));
+        return knowledgeBaseService.requireAccessByName(name)
+            .then(request.bodyToMono(KnowledgeBase.class)
+                .flatMap(update -> knowledgeBaseService.update(name, update))
+                .flatMap(kb -> ServerResponse.ok().bodyValue(kb)));
     }
 
     private Mono<ServerResponse> deleteKnowledgeBase(ServerRequest request) {
         var name = request.pathVariable("name");
-        return knowledgeBaseService.delete(name)
+        return knowledgeBaseService.requireAccessByName(name)
+            .flatMap(kb -> knowledgeBaseService.delete(name))
             .then(ServerResponse.ok().build());
     }
 
@@ -132,18 +135,33 @@ public class KnowledgeBaseConsoleEndpoint implements CustomEndpoint {
                         }
                         return List.<String>of();
                     })
-                    .flatMap(docService::exportZip)
-                    .flatMap(bytes -> ServerResponse.ok()
-                        .contentType(MediaType.APPLICATION_OCTET_STREAM)
-                        .header(HttpHeaders.CONTENT_DISPOSITION,
-                            "attachment; filename=\"minidocs" + exportTimestamp() + ".zip\"")
-                        .bodyValue(new ByteArrayResource(bytes)));
+                    .flatMap(names -> knowledgeBaseService.currentAccess().flatMap(access -> {
+                        // 只导出当前用户有权访问的知识库（私有非成员不可导出）
+                        var accessible = names.stream()
+                            .filter(n -> filterExportAccessible(n, access))
+                            .toList();
+                        return docService.exportZip(accessible)
+                            .flatMap(bytes -> ServerResponse.ok()
+                                .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                                .header(HttpHeaders.CONTENT_DISPOSITION,
+                                    "attachment; filename=\"minidocs" + exportTimestamp() + ".zip\"")
+                                .bodyValue(new ByteArrayResource(bytes)));
+                    }));
             });
     }
 
     private static String exportTimestamp() {
         return DateTimeFormatter.ofPattern("yyyyMMddHHmmssSSS")
             .format(LocalDateTime.now());
+    }
+
+    private boolean filterExportAccessible(String name, KnowledgeBaseService.UserAccess access) {
+        // 用 try 忽略不存在的知识库（保留原行为不阻塞导出）
+        return knowledgeBaseService.get(name)
+            .map(kb -> KnowledgeBaseService.canAccess(kb, access.username(), access.manage()))
+            .onErrorReturn(false)
+            .blockOptional()
+            .orElse(false);
     }
 
     private Mono<ServerResponse> importKnowledgeBasePreview(ServerRequest request) {

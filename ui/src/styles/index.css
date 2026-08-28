@@ -1,8 +1,5 @@
-/* 主题主色覆盖（主题蓝） */
-:root {
-  --colors-primary: 37 99 235 !important;
-  --colors-primary-foreground: 255 255 255 !important;
-}
+/* 注意：不得在 :root 上覆盖 --colors-primary 等全局设计变量，以免污染 Halo 原生页面。
+   如确需自定义配色，应将变量限定在插件自身页面根节点（如 .knowledge-base-list）。 */
 
 /* 隐藏 cherry-markdown 渲染标题时的锚点链接图标 */
 .cherry-markdown a.anchor {

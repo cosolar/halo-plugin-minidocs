@@ -54,14 +54,18 @@ interface KnowledgeBase {
     displayName: string;
     slug?: string;
     description?: string;
-    logo?: string;
     cover?: string;
+    logo?: string;
     tags?: string[];
     publicVisible?: boolean;
     members?: string[];
     priority?: number;
     creationTime?: string;
     updateTime?: string;
+    shareEnabled?: boolean;
+    shareToken?: string;
+    sharePassword?: string;
+    shareExpiresAt?: string;
   };
   status?: {
     docCount?: number;
@@ -95,8 +99,8 @@ const form = reactive({
   displayName: "",
   slug: "",
   description: "",
-  logo: "",
   cover: "",
+  logo: "",
   priority: 10,
   tags: [] as string[],
   members: [] as string[],
@@ -356,8 +360,6 @@ function closeImportModal() {
 // 批量选择
 const selectedNames = ref<string[]>([]);
 const cancelToken = ref(false);
-// logo 加载失败兜底
-const logoErrors = ref<Set<string>>(new Set());
 
 const filteredCount = computed(() => {
   if (publicVisible.value === undefined) return total.value;
@@ -368,19 +370,14 @@ const filteredCount = computed(() => {
     : 0;
 });
 
-const themePresets = [
-  { bg: "bg-blue-50", text: "text-blue-600" },
-  { bg: "bg-emerald-50", text: "text-emerald-600" },
-  { bg: "bg-indigo-50", text: "text-indigo-600" },
-  { bg: "bg-orange-50", text: "text-orange-600" },
-  { bg: "bg-purple-50", text: "text-purple-600" },
-  { bg: "bg-cyan-50", text: "text-cyan-600" },
-  { bg: "bg-rose-50", text: "text-rose-600" },
-];
-
-function getTheme(kb: KnowledgeBase) {
-  const hash = kb.metadata.name.split("").reduce((acc, c) => acc + c.charCodeAt(0), 0);
-  return themePresets[hash % themePresets.length];
+function getStatusTheme(kb: KnowledgeBase) {
+  if (kb.spec.members?.length) {
+    return { bg: "bg-blue-50", text: "text-blue-600" };
+  }
+  if (kb.spec.publicVisible) {
+    return { bg: "bg-green-50", text: "text-green-600" };
+  }
+  return { bg: "bg-purple-50", text: "text-purple-600" };
 }
 
 function formatTime(time?: string, fmt = "YYYY-MM-DD HH:mm") {
@@ -501,8 +498,8 @@ function openCreate() {
   form.displayName = "";
   form.slug = "";
   form.description = "";
-  form.logo = "";
   form.cover = "";
+  form.logo = "";
   form.priority = 10;
   form.tags = [];
   form.members = [];
@@ -516,8 +513,8 @@ function openEdit(kb: KnowledgeBase) {
   form.displayName = kb.spec.displayName;
   form.slug = kb.spec.slug || "";
   form.description = kb.spec.description || "";
-  form.logo = kb.spec.logo || "";
   form.cover = kb.spec.cover || "";
+  form.logo = kb.spec.logo || "";
   form.priority = kb.spec.priority ?? 10;
   form.tags = kb.spec.tags || [];
   form.members = kb.spec.members || [];
@@ -536,11 +533,11 @@ async function save() {
       displayName: form.displayName,
       slug: form.slug || undefined,
       description: form.description || undefined,
-      logo: form.logo || undefined,
       cover: form.cover || undefined,
+      logo: form.logo || undefined,
       priority: form.priority == null ? undefined : form.priority,
       tags: form.tags.filter(Boolean),
-      members: form.members,
+      members: form.publicVisible ? [] : form.members,
       publicVisible: form.publicVisible,
     };
     if (editing.value) {
@@ -561,6 +558,118 @@ async function save() {
     await loadStats();
   } finally {
     saving.value = false;
+  }
+}
+
+// ============ 外链分享 ============
+const shareModalVisible = ref(false);
+const shareSaving = ref(false);
+const shareKb = ref<KnowledgeBase | null>(null);
+const shareForm = reactive({
+  enabled: false,
+  password: "",
+  token: "",
+  period: 0,
+  url: "",
+});
+
+function generateShareToken() {
+  const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  let s = "";
+  for (let i = 0; i < 12; i++) {
+    s += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return s;
+}
+
+function isKbShared(kb: KnowledgeBase) {
+  return !!((kb.spec as Record<string, unknown>)?.shareEnabled);
+}
+
+function buildShareUrl(token: string) {
+  return token ? `${window.location.origin}/docs/share/${token}` : "";
+}
+
+function openShare(kb: KnowledgeBase) {
+  shareKb.value = kb;
+  const spec = (kb.spec || {}) as Record<string, unknown>;
+  shareForm.enabled = !!spec.shareEnabled;
+  shareForm.token = (spec.shareToken as string) || "";
+  shareForm.password = (spec.sharePassword as string) || "";
+  let period = 0;
+  if (spec.shareExpiresAt) {
+    const remainDays = Math.ceil(
+      (new Date(spec.shareExpiresAt as string).getTime() - Date.now()) / 86400000
+    );
+    if (remainDays > 0) {
+      period = remainDays <= 7 ? 7 : remainDays <= 30 ? 30 : 90;
+    }
+  }
+  shareForm.period = period;
+  shareForm.url = buildShareUrl(shareForm.token);
+  shareModalVisible.value = true;
+}
+
+async function saveShare() {
+  const kb = shareKb.value;
+  if (!kb) return;
+  if (shareForm.enabled && !shareForm.token) {
+    shareForm.token = generateShareToken();
+  }
+  shareSaving.value = true;
+  try {
+    const baseSpec = (kb.spec || {}) as Record<string, unknown>;
+    const expiresAt = shareForm.enabled && shareForm.period > 0
+      ? new Date(Date.now() + shareForm.period * 86400000).toISOString()
+      : undefined;
+    const spec = {
+      ...baseSpec,
+      shareEnabled: shareForm.enabled,
+      shareToken: shareForm.token || undefined,
+      sharePassword: shareForm.enabled && shareForm.password
+        ? shareForm.password : undefined,
+      shareExpiresAt: expiresAt,
+    };
+    const resp = await axiosInstance.put(
+      `${API_PREFIX}/knowledgebases/${kb.metadata.name}`,
+      { metadata: { name: kb.metadata.name }, spec }
+    );
+    const saved = (resp.data as KnowledgeBase | undefined)?.spec as
+      | Record<string, unknown>
+      | undefined;
+    shareForm.enabled = !!(saved?.shareEnabled as boolean);
+    shareForm.token = (saved?.shareToken as string) || shareForm.token;
+    shareForm.url = buildShareUrl(shareForm.token);
+    // 保存后不关闭弹窗，方便立即复制外链
+    Toast.success(shareForm.enabled ? "已保存，请复制外链" : "已关闭外链分享");
+    // 刷新列表，同步卡片上的“已分享”状态标识
+    await load();
+  } finally {
+    shareSaving.value = false;
+  }
+}
+
+async function copyShareLink() {
+  const url = shareForm.url;
+  if (!url) {
+    Toast.warning("请先开启分享并保存，再复制链接");
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(url);
+    Toast.success("链接已复制");
+  } catch {
+    const ta = document.createElement("textarea");
+    ta.value = url;
+    document.body.appendChild(ta);
+    ta.select();
+    try {
+      document.execCommand("copy");
+      Toast.success("链接已复制");
+    } catch {
+      Toast.error("复制失败，请手动复制");
+    }
+    document.body.removeChild(ta);
   }
 }
 
@@ -605,14 +714,6 @@ function batchRemove() {
       await loadStats();
     },
   });
-}
-
-function handleLogoError(name: string) {
-  logoErrors.value.add(name);
-}
-
-function showLogo(kb: KnowledgeBase) {
-  return !!kb.spec.logo && !logoErrors.value.has(kb.metadata.name);
 }
 
 onMounted(() => {
@@ -857,21 +958,9 @@ onMounted(() => {
               @change="toggleSelect(kb)"
             />
             <div class="kb-card-info">
-              <div
-                v-if="!showLogo(kb)"
-                class="kb-avatar"
-                :class="[getTheme(kb).bg, getTheme(kb).text]"
-              >
+              <div class="kb-avatar" :class="[getStatusTheme(kb).bg, getStatusTheme(kb).text]">
                 <IconBookRead class="h-6 w-6" />
               </div>
-              <img
-                v-else
-                :src="kb.spec.logo"
-                :alt="kb.spec.displayName"
-                class="kb-avatar kb-avatar-img"
-                loading="lazy"
-                @error="handleLogoError(kb.metadata.name)"
-              />
               <div class="kb-card-titles">
                 <h3 class="kb-card-title">{{ kb.spec.displayName }}</h3>
                 <div v-if="kb.spec.tags?.length" class="kb-tag-list kb-tag-list-inline">
@@ -886,8 +975,17 @@ onMounted(() => {
               </div>
             </div>
             <VTag
-              v-if="kb.spec.publicVisible"
-              type="success"
+              v-if="kb.spec.members?.length"
+              size="sm"
+              class="kb-status-tag kb-status-team"
+            >
+              <template #leftIcon>
+                <svg class="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+              </template>
+              团队
+            </VTag>
+            <VTag
+              v-else-if="kb.spec.publicVisible"
               size="sm"
               class="kb-status-tag kb-status-public"
             >
@@ -896,7 +994,7 @@ onMounted(() => {
               </template>
               公开
             </VTag>
-            <VTag v-else type="secondary" size="sm" class="kb-status-tag kb-status-private">
+            <VTag v-else size="sm" class="kb-status-tag kb-status-private">
               <template #leftIcon>
                 <IconLockPasswordLine class="h-3 w-3" />
               </template>
@@ -910,9 +1008,19 @@ onMounted(() => {
             {{ kb.spec.description || '暂无描述' }}
           </p>
           <div class="kb-card-meta">
-            <span class="kb-meta-item">
-              <IconPages class="h-3.5 w-3.5" />
-              {{ kb.status?.docCount ?? 0 }} 篇文档
+            <span class="kb-meta-left">
+              <span class="kb-meta-item" title="文档数">
+                <IconPages class="h-3.5 w-3.5" />
+                {{ kb.status?.docCount ?? 0 }}
+              </span>
+              <span class="kb-meta-item" :title="'访问量 ' + (kb.spec?.accessCount ?? 0)">
+                <IconEye class="h-3.5 w-3.5" />
+                {{ kb.spec?.accessCount ?? 0 }}
+              </span>
+              <span class="kb-meta-item" :title="'点赞量 ' + (kb.spec?.likeCount ?? 0)">
+                <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+                {{ kb.spec?.likeCount ?? 0 }}
+              </span>
             </span>
             <span
               class="kb-meta-item"
@@ -938,6 +1046,16 @@ onMounted(() => {
               进入
             </VButton>
             <div class="kb-card-actions">
+              <button
+                class="icon-btn icon-btn-share"
+                :class="{ 'is-on': isKbShared(kb) }"
+                :title="isKbShared(kb) ? '已分享，点击管理外链' : '分享'"
+                aria-label="分享"
+                @click.stop="openShare(kb)"
+              >
+                <span v-if="isKbShared(kb)" class="share-on-dot"></span>
+                <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+              </button>
               <button
                 class="icon-btn icon-btn-export"
                 title="导出"
@@ -986,27 +1104,15 @@ onMounted(() => {
               @click.stop
               @change="toggleSelect(kb)"
             />
-            <div
-              v-if="!showLogo(kb)"
-              class="kb-avatar"
-              :class="[getTheme(kb).bg, getTheme(kb).text]"
-            >
+            <div class="kb-avatar" :class="[getStatusTheme(kb).bg, getStatusTheme(kb).text]">
               <IconBookRead class="h-5 w-5" />
             </div>
-            <img
-              v-else
-              :src="kb.spec.logo"
-              :alt="kb.spec.displayName"
-              class="kb-avatar kb-avatar-img"
-              loading="lazy"
-              @click.stop
-              @error="handleLogoError(kb.metadata.name)"
-            />
             <div class="kb-list-info">
               <div class="kb-list-title-row">
                 <h3 class="kb-card-title">{{ kb.spec.displayName }}</h3>
-                <VTag v-if="kb.spec.publicVisible" type="success" size="sm">公开</VTag>
-                <VTag v-else type="warning" size="sm">私有</VTag>
+                <VTag v-if="kb.spec.members?.length" size="sm" class="kb-status-inline kb-status-team">团队</VTag>
+                <VTag v-else-if="kb.spec.publicVisible" size="sm" class="kb-status-inline kb-status-public">公开</VTag>
+                <VTag v-else size="sm" class="kb-status-inline kb-status-private">私有</VTag>
               </div>
               <p class="kb-card-desc">
                 {{ kb.spec.description || '暂无描述' }}
@@ -1026,6 +1132,16 @@ onMounted(() => {
               </span>
             </div>
             <div class="kb-list-actions">
+              <button
+                class="icon-btn icon-btn-share"
+                :class="{ 'is-on': isKbShared(kb) }"
+                :title="isKbShared(kb) ? '已分享，点击管理外链' : '分享'"
+                aria-label="分享"
+                @click.stop="openShare(kb)"
+              >
+                <span v-if="isKbShared(kb)" class="share-on-dot"></span>
+                <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+              </button>
               <button
                 class="icon-btn icon-btn-export"
                 title="导出"
@@ -1059,7 +1175,7 @@ onMounted(() => {
     <!-- 关闭滚动内容区 -->
     </div>
 
-    <div v-if="total > size" class="kb-pagination-section">
+    <div class="kb-pagination-section">
       <PaginationBar
         :page="page"
         :size="size"
@@ -1101,14 +1217,6 @@ onMounted(() => {
           type="textarea"
           name="description"
           placeholder="一句话介绍这个知识库"
-        />
-        <FormKit
-          v-model="form.logo"
-          label="图标地址（URL，可选）"
-          type="text"
-          name="logo"
-          placeholder="https://example.com/logo.png"
-          help="填写后可展示为知识库卡片图标"
         />
         <div class="mb-4">
           <label class="formkit-label block text-sm font-medium text-gray-700">
@@ -1159,12 +1267,12 @@ onMounted(() => {
           label="标签"
           placeholder="输入后按回车添加"
         />
-        <div class="mb-4">
+        <div v-if="!form.publicVisible" class="mb-4">
           <label class="formkit-label block text-sm font-medium text-gray-700">
             成员（私有知识库可访问者）
           </label>
           <p class="formkit-help mt-1 text-xs text-gray-500">
-            勾选可访问该私有知识库的用户，公开知识库无需设置
+            勾选可访问该私有知识库的用户；开启公开可见后无需设置
           </p>
           <UserSelect
             v-model="form.members"
@@ -1233,6 +1341,10 @@ onMounted(() => {
             </label>
           </div>
         </div>
+        <p class="text-xs text-gray-500">
+          覆盖采用安全替换：会先完整导入新数据并校验成功，再替换原同名知识库；
+          若中途失败将自动回滚，原数据保持不变，不会丢失。
+        </p>
       </div>
       <template #footer>
         <VSpace>
@@ -1241,6 +1353,97 @@ onMounted(() => {
           </VButton>
           <VButton type="primary" :loading="importing" @click="confirmImport">
             开始导入
+          </VButton>
+        </VSpace>
+      </template>
+    </VModal>
+
+    <!-- 外链分享弹窗 -->
+    <VModal
+      v-model:visible="shareModalVisible"
+      :title="'分享知识库'"
+      :width="560"
+    >
+      <div class="share-form">
+        <div class="share-row share-toggle-row">
+          <div class="share-row-left">
+            <div class="share-row-title">开启外链分享</div>
+            <div class="share-row-help">
+              开启后任何人无需登录，凭外链即可查看，不受知识库公开/私有权限约束
+            </div>
+          </div>
+          <VSwitch v-model="shareForm.enabled" />
+        </div>
+
+        <template v-if="shareForm.enabled">
+          <div class="share-divider"></div>
+
+          <!-- 访问密码 -->
+          <div class="share-row">
+            <div class="share-row-left">
+              <div class="share-row-title">访问密码</div>
+              <div class="share-row-help">留空则无需密码，任何持有外链的人均可直接访问</div>
+            </div>
+            <div class="share-row-right">
+              <input
+                v-model="shareForm.password"
+                type="text"
+                class="share-input"
+                placeholder="不填表示无密码访问"
+                autocomplete="off"
+              />
+            </div>
+          </div>
+
+          <!-- 外链有效期 -->
+          <div class="share-row">
+            <div class="share-row-left">
+              <div class="share-row-title">外链有效期</div>
+              <div class="share-row-help">到期后外链自动失效，需重新设置</div>
+            </div>
+            <div class="share-row-right">
+              <select v-model="shareForm.period" class="share-select">
+                <option :value="0">永久有效</option>
+                <option :value="7">7 天</option>
+                <option :value="30">30 天</option>
+                <option :value="90">90 天</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- 外链 -->
+          <div class="share-divider"></div>
+          <div class="share-row share-link-row">
+            <div class="share-row-left">
+              <div class="share-row-title">分享外链</div>
+              <div class="share-row-help">保存后自动生成，可在此复制</div>
+            </div>
+            <div class="share-row-right share-link-box">
+              <input
+                :value="shareForm.url"
+                type="text"
+                class="share-input share-link-input"
+                readonly
+                placeholder="保存后将在此显示外链地址"
+              />
+              <VButton
+                v-if="shareForm.url"
+                size="sm"
+                type="secondary"
+                class="share-copy-btn"
+                @click="copyShareLink"
+              >
+                复制链接
+              </VButton>
+            </div>
+          </div>
+        </template>
+      </div>
+      <template #footer>
+        <VSpace>
+          <VButton type="secondary" @click="shareModalVisible = false">取消</VButton>
+          <VButton type="primary" :loading="shareSaving" @click="saveShare">
+            保存
           </VButton>
         </VSpace>
       </template>
@@ -1277,6 +1480,7 @@ onMounted(() => {
   flex: 1 1 auto;
   min-height: 0;
   width: 100%;
+  max-width: 1560px;
   margin: 0 auto;
   padding: 1rem;
   gap: 1rem;
@@ -1635,23 +1839,12 @@ onMounted(() => {
 /* ========== 网格视图 ========== */
 .kb-grid {
   display: grid;
-  grid-template-columns: repeat(1, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
   gap: 1rem;
 }
 
-@media (min-width: 768px) {
-  .kb-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (min-width: 1024px) {
-  .kb-grid {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-}
-
 .kb-card-grid {
+  position: relative;
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -1685,6 +1878,7 @@ onMounted(() => {
   gap: 0.75rem;
   min-width: 0;
   flex: 1;
+  padding-right: 4.5rem;
 }
 
 .kb-avatar {
@@ -1695,10 +1889,6 @@ onMounted(() => {
   height: 2.75rem;
   flex-shrink: 0;
   border-radius: 0.5rem;
-}
-
-.kb-avatar-img {
-  object-fit: cover;
 }
 
 .kb-card-titles {
@@ -1729,23 +1919,51 @@ onMounted(() => {
 }
 
 .kb-status-tag {
-  flex-shrink: 0;
-  margin-top: 0.125rem;
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 0 12px 0 12px !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+}
+
+.kb-status-inline {
   display: inline-flex;
   align-items: center;
   border-radius: 9999px;
+  margin-left: 0.5rem;
+  flex-shrink: 0;
 }
 
-.kb-status-public {
-  background-color: rgba(220, 252, 231, 0.9);
-  color: #15803d;
-  border: 1px solid #bbf7d0;
+.kb-status-private,
+.kb-status-public,
+.kb-status-team {
+  color: #ffffff !important;
+  background-color: transparent;
 }
 
 .kb-status-private {
-  background-color: rgba(224, 231, 255, 0.9);
-  color: #4338ca;
-  border: 1px solid #c7d2fe;
+  background-color: #7c3aed !important;
+  border-color: #7c3aed !important;
+}
+
+.kb-status-public {
+  background-color: #16a34a !important;
+  border-color: #16a34a !important;
+}
+
+.kb-status-team {
+  background-color: #2563eb !important;
+  border-color: #2563eb !important;
+}
+
+.kb-meta-left {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
 }
 
 .kb-card-body {
@@ -2082,6 +2300,33 @@ onMounted(() => {
   border-color: #fde68a;
 }
 
+/* ========== 分享按钮 ========== */
+.icon-btn-share {
+  position: relative;
+  background: #ecfdf5;
+  color: #059669;
+}
+
+.icon-btn-share:hover,
+.icon-btn-share.is-on {
+  background: #d1fae5;
+  color: #047857;
+  border-color: #a7f3d0;
+}
+
+/* 已分享状态：右上角绿色小圆点 */
+.share-on-dot {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #10b981;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 1px #10b981;
+}
+
 /* ========== 知识库封面上传 ========== */
 .kb-cover-field {
   display: flex;
@@ -2229,5 +2474,100 @@ onMounted(() => {
 .import-result-msg {
   font-size: 0.75rem;
   color: #d1d5db;
+}
+
+/* ========== 外链分享弹窗 ========== */
+.share-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+}
+
+.share-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.share-toggle-row {
+  align-items: center;
+}
+
+.share-row-left {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.share-row-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #111827;
+}
+
+.share-row-help {
+  margin-top: 0.1875rem;
+  font-size: 0.75rem;
+  color: #6b7280;
+}
+
+.share-row-right {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.share-input {
+  width: 13rem;
+  padding: 0.4375rem 0.625rem;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  color: #111827;
+  background: #f9fafb;
+  border: 1px solid #d1d5db;
+  border-radius: 0.375rem;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.share-input:focus {
+  border-color: #10b981;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.15);
+}
+
+.share-select {
+  width: 9rem;
+  padding: 0.4375rem 0.5rem;
+  font-size: 0.8125rem;
+  color: #111827;
+  background: #f9fafb;
+  border: 1px solid #d1d5db;
+  border-radius: 0.375rem;
+  outline: none;
+}
+
+.share-divider {
+  height: 1px;
+  background: #e5e7eb;
+}
+
+.share-link-row {
+  align-items: center;
+}
+
+.share-link-box {
+  gap: 0.5rem;
+}
+
+.share-link-input {
+  width: 15rem;
+  color: #6b7280;
+  background: #f3f4f6;
+  cursor: default;
+}
+
+.share-copy-btn {
+  flex-shrink: 0;
 }
 </style>

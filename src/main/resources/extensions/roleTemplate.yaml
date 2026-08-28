@@ -56,4 +56,9 @@ rules:
       - "docs"
       - "knowledgebases/tree"
       - "knowledgebases/docs"
-    verbs: [ "get", "list" ]
+      - "knowledgebases/stats"
+      - "knowledgebases/like"
+      - "share"
+      - "share/stats"
+      - "share/like"
+    verbs: [ "get", "list", "create" ]

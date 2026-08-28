@@ -1,4 +1,4 @@
-package run.halo.plugin.minidocs.extension;
+package cn.minims.minidocs.extension;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.Instant;
