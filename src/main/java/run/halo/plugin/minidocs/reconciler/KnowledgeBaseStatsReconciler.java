@@ -53,7 +53,7 @@ public class KnowledgeBaseStatsReconciler implements Reconciler<Reconciler.Reque
         var published = client.listAll(KnowledgeBaseDoc.class, publishedDocs,
             Sort.by(Sort.Order.desc("spec.publishTime")));
         var lastPublishTime = published.isEmpty() ? null
-            : published.get(0).getSpec().getPublishTime();
+            : published.getFirst().getSpec().getPublishTime();
 
         client.fetch(KnowledgeBase.class, kbName).ifPresent(kb -> {
             var newCount = Math.toIntExact(count);

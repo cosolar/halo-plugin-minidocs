@@ -37,30 +37,35 @@ public class MinidocsFinder {
     /**
      * 公开知识库详情；非公开知识库返回空。
      */
-    public Mono<KnowledgeBase> getKnowledgeBase(String name) {
-        return knowledgeBaseService.get(name)
+    public Mono<KnowledgeBase> getKnowledgeBase(String kbSlug) {
+        return knowledgeBaseService.getBySlugOrName(kbSlug)
             .filter(kb -> Boolean.TRUE.equals(kb.getSpec().getPublicVisible()));
     }
 
     /**
      * 知识库下已发布文档分页列表。
      */
-    public Mono<ListResult<KnowledgeBaseDoc>> listDocs(String kbName, int page, int size) {
-        return docService.list(kbName, null, KnowledgeBaseDocService.PHASE_PUBLISHED, page, size);
+    public Mono<ListResult<KnowledgeBaseDoc>> listDocs(String kbSlug, int page, int size) {
+        return knowledgeBaseService.getBySlugOrName(kbSlug)
+            .flatMap(kb -> docService.list(kb.getMetadata().getName(), null,
+                KnowledgeBaseDocService.PHASE_PUBLISHED, page, size));
     }
 
     /**
      * 已发布文档详情。
      */
-    public Mono<KnowledgeBaseDoc> getDoc(String kbName, String docName) {
-        return docService.getPublishedDoc(kbName, docName);
+    public Mono<KnowledgeBaseDoc> getDoc(String kbSlug, String docName) {
+        return knowledgeBaseService.getBySlugOrName(kbSlug)
+            .flatMap(kb -> docService.getPublishedDoc(kb.getMetadata().getName(), docName));
     }
 
     /**
      * 已发布文档树。
      */
-    public Mono<List<DocTreeNode>> getDocTree(String kbName) {
-        return docService.buildTree(kbName, KnowledgeBaseDocService.PHASE_PUBLISHED);
+    public Mono<List<DocTreeNode>> getDocTree(String kbSlug) {
+        return knowledgeBaseService.getBySlugOrName(kbSlug)
+            .flatMap(kb -> docService.buildTree(kb.getMetadata().getName(),
+                KnowledgeBaseDocService.PHASE_PUBLISHED));
     }
 
     /**

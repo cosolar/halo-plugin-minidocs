@@ -1,7 +1,9 @@
 package run.halo.plugin.minidocs.service;
 
 import java.time.Instant;
+import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Sort;
@@ -136,6 +138,57 @@ public class KnowledgeBaseService {
     }
 
     /**
+     * 按知识库链接别名（spec.slug）或 metadata.name 解析知识库，不存在时返回 404。
+     * <p>前台路由（/docs/view/{kbSlug} 等）使用此方法，使 URL 既支持用户自定义 slug，
+     * 也兼容历史以 metadata.name（UUID）直接访问的链接。
+     */
+    public Mono<KnowledgeBase> getBySlugOrName(String kbSlug) {
+        return findBySlug(kbSlug)
+            .switchIfEmpty(client.fetch(KnowledgeBase.class, kbSlug))
+            .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND,
+                "知识库不存在: " + kbSlug)));
+    }
+
+    private Mono<KnowledgeBase> findBySlug(String slug) {
+        if (!StringUtils.hasText(slug)) {
+            return Mono.empty();
+        }
+        var options = ListOptions.builder().fieldQuery(equal("spec.slug", slug)).build();
+        return client.listBy(KnowledgeBase.class, options, PageRequestImpl.of(1, 1))
+            .flatMap(result -> result.getItems().isEmpty()
+                ? Mono.empty()
+                : Mono.justOrEmpty(result.getItems().getFirst()));
+    }
+
+    /**
+     * 判断指定 slug 是否已被其它知识库占用（用于创建/更新时的唯一性校验）。
+     *
+     * @param slug        待校验的 slug
+     * @param excludeName 当前知识库的 metadata.name（更新自身时排除），可为 null
+     */
+    public Mono<Boolean> slugExists(String slug, String excludeName) {
+        if (!StringUtils.hasText(slug)) {
+            return Mono.just(false);
+        }
+        var options = ListOptions.builder().fieldQuery(equal("spec.slug", slug)).build();
+        return client.listBy(KnowledgeBase.class, options, PageRequestImpl.of(1, 100))
+            .map(result -> result.getItems().stream()
+                .anyMatch(kb -> excludeName == null
+                    || !excludeName.equals(kb.getMetadata().getName())));
+    }
+
+    /**
+     * 生成知识库默认 slug：KB + yyyyMMddHHmmssSSS + 6 位随机数字，
+     * 例如 KB2026082815301234567890。
+     */
+    public static String generateSlug() {
+        var time = DateTimeFormatter.ofPattern("yyyyMMddHHmmssSSS")
+            .format(java.time.LocalDateTime.now());
+        var rand = String.format("%06d", ThreadLocalRandom.current().nextInt(1_000_000));
+        return "KB" + time + rand;
+    }
+
+    /**
      * 刷新知识库更新时间：在知识库下任一文档发生增删改等内容变动后调用，
      * 使“最近更新”排序能准确反映知识库内容的实际变更时间。
      */
@@ -192,7 +245,18 @@ public class KnowledgeBaseService {
         if (!StringUtils.hasText(kb.getSpec().getCreatorName())) {
             kb.getSpec().setCreatorName(StringUtils.hasText(creatorName) ? creatorName : "unknown");
         }
-        return client.create(kb);
+        // slug：用户未填则自动生成；随后校验全局唯一
+        if (!StringUtils.hasText(kb.getSpec().getSlug())) {
+            kb.getSpec().setSlug(generateSlug());
+        }
+        return slugExists(kb.getSpec().getSlug(), null)
+            .flatMap(exists -> {
+                if (exists) {
+                    return Mono.error(new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "知识库链接别名已存在: " + kb.getSpec().getSlug()));
+                }
+                return client.create(kb);
+            });
     }
 
     /**
@@ -214,8 +278,19 @@ public class KnowledgeBaseService {
                 update.getSpec().setCreatorName(kb.getSpec().getCreatorName());
             }
             update.getSpec().setUpdateTime(Instant.now());
-            kb.setSpec(update.getSpec());
-            return client.update(kb);
+            // slug：用户清空则重新生成；校验唯一（排除自身）
+            if (!StringUtils.hasText(update.getSpec().getSlug())) {
+                update.getSpec().setSlug(generateSlug());
+            }
+            return slugExists(update.getSpec().getSlug(), name)
+                .flatMap(exists -> {
+                    if (exists) {
+                        return Mono.error(new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                            "知识库链接别名已存在: " + update.getSpec().getSlug()));
+                    }
+                    kb.setSpec(update.getSpec());
+                    return client.update(kb);
+                });
         });
     }
 

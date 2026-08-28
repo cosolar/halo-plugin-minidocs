@@ -51,6 +51,7 @@ interface KnowledgeBase {
   };
   spec: {
     displayName: string;
+    slug?: string;
     description?: string;
     logo?: string;
     cover?: string;
@@ -91,6 +92,7 @@ const editing = ref<KnowledgeBase | null>(null);
 const form = reactive({
   name: "",
   displayName: "",
+  slug: "",
   description: "",
   logo: "",
   cover: "",
@@ -409,6 +411,7 @@ function openCreate() {
   editing.value = null;
   form.name = utils.id.uuid();
   form.displayName = "";
+  form.slug = "";
   form.description = "";
   form.logo = "";
   form.cover = "";
@@ -423,6 +426,7 @@ function openEdit(kb: KnowledgeBase) {
   editing.value = kb;
   form.name = kb.metadata.name;
   form.displayName = kb.spec.displayName;
+  form.slug = kb.spec.slug || "";
   form.description = kb.spec.description || "";
   form.logo = kb.spec.logo || "";
   form.cover = kb.spec.cover || "";
@@ -442,6 +446,7 @@ async function save() {
   try {
     const spec = {
       displayName: form.displayName,
+      slug: form.slug || undefined,
       description: form.description || undefined,
       logo: form.logo || undefined,
       cover: form.cover || undefined,
@@ -987,6 +992,14 @@ onMounted(() => {
           name="displayName"
           validation="required"
           placeholder="例如：团队知识库"
+        />
+        <FormKit
+          v-model="form.slug"
+          label="链接别名"
+          name="slug"
+          type="text"
+          placeholder="例如：team-kb（留空由系统自动生成）"
+          help="用于前台访问链接 /docs/view/别名，只能包含字母、数字、连字符和下划线"
         />
         <FormKit
           v-model="form.description"

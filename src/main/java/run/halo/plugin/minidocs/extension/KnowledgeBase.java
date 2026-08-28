@@ -40,6 +40,9 @@ public class KnowledgeBase extends AbstractExtension {
             maxLength = 100)
         private String displayName;
 
+        @Schema(description = "知识库链接别名（URL 友好标识，留空时系统自动生成），用于前台 /docs/view/{slug} 等路由")
+        private String slug;
+
         @Schema(description = "知识库描述")
         private String description;
 

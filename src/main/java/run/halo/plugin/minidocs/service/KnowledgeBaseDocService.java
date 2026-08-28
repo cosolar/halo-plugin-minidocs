@@ -19,7 +19,7 @@ import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
-import com.fasterxml.jackson.databind.JsonNode;
+import tools.jackson.databind.JsonNode;
 import lombok.Builder;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
@@ -36,7 +36,7 @@ import run.halo.app.extension.Metadata;
 import run.halo.app.extension.MetadataUtil;
 import run.halo.app.extension.PageRequestImpl;
 import run.halo.app.extension.ReactiveExtensionClient;
-import run.halo.app.infra.utils.JsonUtils;
+import tools.jackson.databind.json.JsonMapper;
 import run.halo.app.plugin.ReactiveSettingFetcher;
 import run.halo.plugin.minidocs.extension.KnowledgeBase;
 import run.halo.plugin.minidocs.extension.KnowledgeBaseDoc;
@@ -58,7 +58,6 @@ public class KnowledgeBaseDocService {
 
     public static final String PHASE_DRAFT = "draft";
     public static final String PHASE_PUBLISHED = "published";
-    public static final String PHASE_ARCHIVED = "archived";
 
     private final ReactiveExtensionClient client;
     private final KnowledgeBaseService knowledgeBaseService;
@@ -142,10 +141,8 @@ public class KnowledgeBaseDocService {
                 }).flatMap(slug -> {
                     spec.setSlug(slug);
                     doc.setSpec(spec);
-                    if (doc.getMetadata() != null) {
-                        MetadataUtil.nullSafeLabels(doc)
-                            .put(KnowledgeBaseService.KNOWLEDGE_BASE_LABEL, kbName);
-                    }
+                    MetadataUtil.nullSafeLabels(doc)
+                        .put(KnowledgeBaseService.KNOWLEDGE_BASE_LABEL, kbName);
                     return client.create(doc)
                         .flatMap(created -> knowledgeBaseService.touch(kbName)
                             .thenReturn(created));
@@ -208,9 +205,9 @@ public class KnowledgeBaseDocService {
      */
     private Mono<Void> awaitIndexRemoved(String name) {
         return Mono.defer(() -> client.fetch(KnowledgeBaseDoc.class, name)
+                .switchIfEmpty(Mono.empty())
                 .flatMap(doc -> Mono.delay(Duration.ofMillis(120))
-                    .then(awaitIndexRemoved(name)))
-                .switchIfEmpty(Mono.empty()))
+                    .then(awaitIndexRemoved(name))))
             .timeout(Duration.ofSeconds(5))
             .onErrorResume(e -> Mono.empty());
     }
@@ -503,7 +500,7 @@ public class KnowledgeBaseDocService {
 
     private byte[] writeJson(Map<String, Object> map) {
         try {
-            return JsonUtils.mapper().writeValueAsBytes(map);
+            return JsonMapper.builder().build().writeValueAsBytes(map);
         } catch (Exception ex) {
             throw new IllegalStateException("序列化 config.json 失败", ex);
         }
@@ -559,10 +556,10 @@ public class KnowledgeBaseDocService {
                 }
                 return knowledgeBaseService.delete(existing.getMetadata().getName())
                     .then(doImportKnowledgeBase(info, creator))
-                    .map(ok -> new ImportResultItem(info.kbConfig.displayName(), true, "已覆盖导入"));
+                    .thenReturn(new ImportResultItem(info.kbConfig.displayName(), true, "已覆盖导入"));
             })
             .switchIfEmpty(Mono.defer(() -> doImportKnowledgeBase(info, creator)
-                .map(ok -> new ImportResultItem(info.kbConfig.displayName(), true, "导入成功"))));
+                .thenReturn(new ImportResultItem(info.kbConfig.displayName(), true, "导入成功"))));
     }
 
     private Mono<Void> doImportKnowledgeBase(ImportInfo info, String creator) {
@@ -573,6 +570,7 @@ public class KnowledgeBaseDocService {
         var spec = new KnowledgeBase.Spec();
         var c = info.kbConfig;
         spec.setDisplayName(c.displayName());
+        spec.setSlug(nullSafe(c.slug()));
         spec.setDescription(nullSafe(c.description()));
         spec.setCover(nullSafe(c.cover()));
         spec.setLogo(nullSafe(c.logo()));
@@ -666,7 +664,7 @@ public class KnowledgeBaseDocService {
             }
             JsonNode cfg;
             try {
-                cfg = JsonUtils.mapper().readTree(cfgBytes);
+                cfg = JsonMapper.builder().build().readTree(cfgBytes);
             } catch (Exception ex) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "config.json 解析失败");
             }
@@ -674,39 +672,40 @@ public class KnowledgeBaseDocService {
             var docsNode = cfg.path("documents");
             var tags = new ArrayList<String>();
             if (kbNode.path("tags").isArray()) {
-                kbNode.path("tags").forEach(t -> tags.add(t.asText()));
+                kbNode.path("tags").forEach(t -> tags.add(t.asString()));
             }
             var documents = new ArrayList<ImportedDocInfo>();
             var contentBySlug = new HashMap<String, byte[]>();
             for (var node : docsNode) {
-                var slug = node.path("slug").asText("");
+                var slug = node.path("slug").asString("");
                 if (slug.isEmpty()) {
                     continue;
                 }
-                var file = node.path("file").asText("");
+                var file = node.path("file").asString("");
                 var content = !file.isEmpty() ? files.get(file) : null;
                 if (content != null) {
                     contentBySlug.put(slug, content);
                 }
                 documents.add(new ImportedDocInfo(
                     slug,
-                    node.path("title").asText(slug),
-                    node.path("parent").asText(""),
-                    node.path("phase").asText(null),
+                    node.path("title").asString(slug),
+                    node.path("parent").asString(""),
+                    node.path("phase").asString((String) null),
                     node.path("priority").isNull() ? null : node.path("priority").asInt(),
-                    node.path("summary").asText(""),
-                    node.path("cover").asText(""),
-                    node.path("author").asText(""),
-                    parseInstantOrNull(node.path("creationTime").asText(null)),
-                    parseInstantOrNull(node.path("publishTime").asText(null))
+                    node.path("summary").asString(""),
+                    node.path("cover").asString(""),
+                    node.path("author").asString(""),
+                    parseInstantOrNull(node.path("creationTime").asString((String) null)),
+                    parseInstantOrNull(node.path("publishTime").asString((String) null))
                 ));
             }
             infos.add(new ImportInfo(dir,
                 new ImportedKbConfig(
-                    kbNode.path("displayName").asText(dir),
-                    kbNode.path("description").asText(""),
-                    kbNode.path("cover").asText(""),
-                    kbNode.path("logo").asText(""),
+                    kbNode.path("displayName").asString(dir),
+                    kbNode.path("slug").asString(""),
+                    kbNode.path("description").asString(""),
+                    kbNode.path("cover").asString(""),
+                    kbNode.path("logo").asString(""),
                     tags,
                     kbNode.path("publicVisible").asBoolean(false)
                 ),
@@ -743,8 +742,8 @@ public class KnowledgeBaseDocService {
         List<ImportedDocInfo> documents, Map<String, byte[]> contentBySlug) {
     }
 
-    private record ImportedKbConfig(String displayName, String description, String cover,
-        String logo, List<String> tags, boolean publicVisible) {
+    private record ImportedKbConfig(String displayName, String slug, String description,
+        String cover, String logo, List<String> tags, boolean publicVisible) {
     }
 
     private record ImportedDocInfo(String slug, String title, String parent, String phase,

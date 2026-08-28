@@ -48,6 +48,8 @@ public class KnowledgeBasePlugin extends BasePlugin {
             indexSpecs.add(IndexSpecs.<KnowledgeBase, Instant>single("spec.updateTime",
                     Instant.class)
                 .indexFunc(kb -> kb.getSpec() == null ? null : kb.getSpec().getUpdateTime()));
+            indexSpecs.add(IndexSpecs.<KnowledgeBase, String>single("spec.slug", String.class)
+                .indexFunc(kb -> kb.getSpec() == null ? null : kb.getSpec().getSlug()));
             indexSpecs.add(IndexSpecs.<KnowledgeBase, Integer>single("status.docCount",
                     Integer.class)
                 .indexFunc(kb -> kb.getStatus() == null ? null : kb.getStatus().getDocCount()));
