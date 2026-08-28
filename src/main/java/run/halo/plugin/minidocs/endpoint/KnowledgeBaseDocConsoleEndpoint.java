@@ -157,7 +157,7 @@ public class KnowledgeBaseDocConsoleEndpoint implements CustomEndpoint {
                 var spec = new KnowledgeBaseDoc.Spec();
                 spec.setKnowledgeBaseName(kbName);
                 spec.setTitle(title);
-                spec.setContent(content);
+                spec.setRaw(content);
                 spec.setParentName(parentName);
                 spec.setPriority(order.getAndIncrement());
                 doc.setSpec(spec);

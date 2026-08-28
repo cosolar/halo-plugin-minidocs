@@ -35,6 +35,7 @@ const MarkdownEditor = defineAsyncComponent(
   () => import("../components/MarkdownEditor.vue")
 );
 import { htmlToMarkdown } from "../utils/markdown";
+import { renderMarkdownToHtml } from "../utils/mdRenderer";
 
 interface KnowledgeBase {
   metadata: { name: string; creationTimestamp?: string };
@@ -72,8 +73,8 @@ interface KnowledgeBaseDoc {
     cover?: string;
     summary?: string;
     updateTime?: string;
+    raw?: string;
     content?: string;
-    contentHtml?: string;
     parentName?: string;
     priority?: number;
     tags?: string[];
@@ -103,7 +104,7 @@ const saving = ref(false);
 
 const docForm = reactive({
   title: "",
-  content: "",
+  raw: "",
   markdown: "",
   slug: "",
   priority: "",
@@ -689,8 +690,8 @@ async function selectDoc(node: DocTreeNode) {
     );
     doc.value = data;
     docForm.title = data.spec.title;
-    docForm.content = data.spec.content || "";
-    docForm.markdown = normalizeContent(data.spec.content || "");
+    docForm.raw = data.spec.raw || "";
+    docForm.markdown = normalizeContent(data.spec.raw || "");
     docForm.slug = data.spec.slug || "";
     docForm.priority = data.spec.priority?.toString() || "";
     docForm.author = data.spec.author || "";
@@ -723,14 +724,14 @@ async function saveDoc() {
     // 从 Markdown 编辑器获取最新内容：以原样 Markdown 保存，并用 cherry 渲染出的 HTML 持久化
     const markdown = markdownEditorRef.value?.getContent() || docForm.markdown;
     docForm.markdown = markdown;
-    docForm.content = markdown;
+    docForm.raw = markdown;
     const payload = {
       spec: {
         ...doc.value?.spec,
         knowledgeBaseName: kbName,
         title: docForm.title,
-        content: markdown,
-        contentHtml: markdownEditorRef.value?.getHtml() || "",
+        raw: markdown,
+        content: markdownEditorRef.value?.getHtml() || "",
         slug: docForm.slug.trim() || undefined,
         author: docForm.author.trim() || undefined,
         cover: docForm.cover.trim() || undefined,
@@ -757,17 +758,66 @@ async function saveDoc() {
 }
 
 async function publishDoc() {
-  if (!selected.value) {
+  const currentDoc = doc.value;
+  const currentName = selected.value;
+  if (!currentDoc || !currentName) {
     return;
   }
+  // 校验：正文非空但 content（渲染 HTML）为空时，先用 cherry / mdRenderer 渲染补齐再发布，
+  // 避免导入或旧数据的文档发布后阅读页正文空白
+  const markdown = (
+    markdownEditorRef.value?.getContent() ||
+    docForm.markdown ||
+    currentDoc.spec.raw ||
+    ""
+  ).trim();
+  const emptyContent = !String(currentDoc.spec.content || "").trim();
+  if (markdown && emptyContent) {
+    await renderAndSaveContent(currentDoc, currentName.name, markdown);
+  }
   await axiosInstance.post(
-    `${API_PREFIX}/knowledgebases/${kbName}/docs/${selected.value.name}/publish`
+    `${API_PREFIX}/knowledgebases/${kbName}/docs/${currentName.name}/publish`
   );
   Toast.success("文档已发布");
   if (doc.value) {
     doc.value.spec.phase = "published";
   }
   await loadTree();
+}
+
+/**
+ * 用 cherry（编辑器）或 mdRenderer 兜底把 Markdown 渲染为 HTML 并持久化到 content。
+ */
+async function renderAndSaveContent(
+  currentDoc: KnowledgeBaseDoc,
+  docName: string,
+  markdown: string
+) {
+  let html = "";
+  try {
+    html = (markdownEditorRef.value?.getHtml() || "").trim();
+  } catch (e) {
+    console.error("获取编辑器 HTML 失败，改用 mdRenderer 渲染", e);
+  }
+  if (!html) {
+    try {
+      html = (await renderMarkdownToHtml(markdown)).trim();
+    } catch (e) {
+      console.error("渲染 Markdown 到 HTML 失败", e);
+      return;
+    }
+  }
+  if (!html) {
+    return;
+  }
+  const payload = { spec: { ...currentDoc.spec, raw: markdown, content: html } };
+  await axiosInstance.put(
+    `${API_PREFIX}/knowledgebases/${kbName}/docs/${docName}`,
+    payload
+  );
+  if (doc.value) {
+    doc.value.spec = payload.spec;
+  }
 }
 
 function openMoveModal() {
@@ -807,8 +857,8 @@ async function duplicateDoc() {
       knowledgeBaseName: kbName,
       title: `${doc.value.spec.title} 副本`,
       slug: doc.value.spec.slug ? `${doc.value.spec.slug}-copy` : undefined,
+      raw: doc.value.spec.raw,
       content: doc.value.spec.content,
-      contentHtml: doc.value.spec.contentHtml,
       parentName: doc.value.spec.parentName,
       priority: doc.value.spec.priority,
       tags: doc.value.spec.tags,
@@ -972,8 +1022,8 @@ async function saveSettings() {
         ...doc.value.spec,
         knowledgeBaseName: kbName,
         title: docForm.title,
-        content: markdown,
-        contentHtml: markdownEditorRef.value?.getHtml() || "",
+        raw: markdown,
+        content: markdownEditorRef.value?.getHtml() || "",
         slug: docForm.slug.trim() || undefined,
         author: docForm.author.trim() || undefined,
         cover: docForm.cover.trim() || undefined,

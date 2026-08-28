@@ -4,73 +4,885 @@
   th:replace="~{layout :: html(head = ~{::head}, content = ~{::content})}"
 >
   <th:block th:fragment="head">
-    <title>知识库列表</title>
+    <title>知识库</title>
     <style>
-      .md-kb-list {
-        max-width: 1100px;
-        margin: 0 auto;
-        padding: 24px 16px;
-        box-sizing: border-box;
+      :root {
+        --md-primary: #14b8a6;
+        --md-primary-soft: #2dd4bf;
+        --md-primary-deep: #0d9488;
+        --md-primary-ink: #0f766e;
+        --md-primary-glow: rgba(20, 184, 166, .16);
+        --md-bg1: #ffffff;
+        --md-bg2: #f6f8f9;
+        --md-card: #ffffff;
+        --md-card-hover: #ffffff;
+        --md-card-shadow: 0 2px 10px rgba(15, 40, 40, .06);
+        --md-card-shadow-hover: 0 14px 30px rgba(13, 90, 90, .14);
+        --md-border: #e7edef;
+        --md-border-strong: #d7e7e2;
+        --md-title: #12322e;
+        --md-sub: #5f7a76;
+        --md-desc: #6b8580;
+        --md-muted: #94aba6;
+        --md-tag-bg: rgba(20, 148, 132, .12);
+        --md-tag: #0d9488;
+        --md-chip-bg: #f2faf7;
+        --md-input-bg: #ffffff;
+        --md-nav-h: 56px;
+        --md-scroll-thumb: rgba(13, 148, 136, .25);
       }
-      .md-kb-list h1 { font-size: 26px; margin: 0 0 20px; }
-      .md-kb-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-        gap: 20px;
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --md-bg1: #0c1413;
+          --md-bg2: #08100f;
+          --md-primary: #2dd4bf;
+          --md-primary-soft: #5eead4;
+          --md-primary-deep: #2dd4bf;
+          --md-primary-ink: #99f6e4;
+          --md-primary-glow: rgba(45, 212, 191, .18);
+          --md-card: #101c1a;
+          --md-card-hover: #12201e;
+          --md-card-shadow: 0 3px 14px rgba(0, 0, 0, .4);
+          --md-card-shadow-hover: 0 18px 36px rgba(0, 0, 0, .55);
+          --md-border: #1d322e;
+          --md-border-strong: #2a4a44;
+          --md-title: #e6f5f1;
+          --md-sub: #8aa39e;
+          --md-desc: #9db5b0;
+          --md-muted: #6b847f;
+          --md-tag-bg: rgba(45, 212, 191, .16);
+          --md-tag: #5eead4;
+          --md-chip-bg: #142420;
+          --md-input-bg: #101c1a;
+          --md-scroll-thumb: rgba(45, 212, 191, .3);
+        }
       }
-      .md-kb-card {
-        display: block;
-        border: 1px solid var(--md-border, #e5e7eb);
-        border-radius: 12px;
-        overflow: hidden;
-        text-decoration: none;
-        color: inherit;
-        background: #fff;
-        transition: box-shadow .15s ease, transform .15s ease;
-      }
-      .md-kb-card:hover {
-        box-shadow: 0 6px 20px rgba(0,0,0,.08);
-        transform: translateY(-2px);
-      }
-      .md-kb-cover {
-        width: 100%;
-        aspect-ratio: 16 / 9;
-        object-fit: cover;
-        background: var(--md-active, #f3f4f6);
-      }
-      .md-kb-body { padding: 14px 16px; }
-      .md-kb-title { font-size: 17px; font-weight: 600; margin: 0 0 6px; }
-      .md-kb-desc {
-        font-size: 13px;
-        color: #6b7280;
+
+      * { box-sizing: border-box; scrollbar-width: thin; scrollbar-color: var(--md-scroll-thumb) transparent; }
+
+      body {
         margin: 0;
-        display: -webkit-box;
-        -webkit-line-clamp: 2;
-        -webkit-box-orient: vertical;
+        background: var(--md-bg2);
+        color: var(--md-title);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+          "Microsoft YaHei", Roboto, sans-serif;
+      }
+
+      /* ---------- 应用容器：占满视口、无页面滚动 ---------- */
+      .md-app {
+        height: 100vh;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+      }
+
+      /* ---------- 顶部导航：logo + 登录人 ---------- */
+      .site-nav {
+        flex: 0 0 auto;
+        height: var(--md-nav-h);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 20px;
+        background: var(--md-bg1);
+        border-bottom: 1px solid var(--md-border);
+        z-index: 60;
+      }
+      .nav-brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--md-title); }
+      .nav-brand img { width: 30px; height: 30px; border-radius: 8px; object-fit: cover; }
+      .nav-logo-fallback {
+        width: 30px; height: 30px;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 15px; font-weight: 700; color: #fff;
+        background: linear-gradient(135deg, var(--md-primary-soft), var(--md-primary-deep));
+        border-radius: 8px;
+      }
+      .nav-title { font-size: 16px; font-weight: 700; letter-spacing: .2px; }
+      .nav-user {
+        display: flex; align-items: center; gap: 8px;
+        color: var(--md-sub); font-size: 14px;
+        background: var(--md-bg2);
+        border: 1px solid var(--md-border);
+        border-radius: 999px; padding: 5px 14px;
+      }
+      .nav-user .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--md-primary); }
+      .nav-user .name { font-weight: 600; }
+
+      /* ---------- 主体内容 ---------- */
+      .md-content {
+        flex: 1 1 auto;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        padding: 16px 22px 12px;
+      }
+
+      /* ---------- 顶部看板 ---------- */
+      .md-stats {
+        flex: 0 0 auto;
+        display: grid;
+        grid-template-columns: repeat(6, 1fr);
+        gap: 12px;
+      }
+      .md-stat {
+        display: flex;
+        align-items: center;
+        gap: 11px;
+        min-width: 0;
+        background: var(--md-card);
+        border: 1px solid var(--md-border);
+        border-radius: 12px;
+        padding: 12px 14px;
+        box-shadow: var(--md-card-shadow);
+      }
+      .md-stat-ico {
+        flex: 0 0 auto;
+        width: 36px; height: 36px;
+        display: flex; align-items: center; justify-content: center;
+        border-radius: 10px;
+        background: var(--md-primary-glow);
+        color: var(--md-primary-deep);
+      }
+      .md-stat-ico svg { width: 20px; height: 20px; }
+      .md-stat-val { font-size: 20px; font-weight: 800; line-height: 1.1; color: var(--md-title); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .md-stat-val.is-text { font-size: 14px; line-height: 1.25; padding-top: 1px; }
+      .md-stat-label { font-size: 11.5px; color: var(--md-sub); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+      /* ---------- 工具栏：搜索 + 排序 + 视图切换 ---------- */
+      .md-toolbar {
+        flex: 0 0 auto;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        margin-top: 14px;
+      }
+      .md-sec-title {
+        flex: 0 0 auto;
+        display: inline-flex; align-items: center; gap: 8px;
+        font-size: 15px; font-weight: 800; color: var(--md-title);
+        white-space: nowrap;
+      }
+      .md-sec-title .ico {
+        width: 27px; height: 27px;
+        display: inline-flex; align-items: center; justify-content: center;
+        border-radius: 8px;
+        background: var(--md-primary-glow); color: var(--md-primary-deep);
+      }
+      .md-sec-title .ico svg { width: 16px; height: 16px; }
+      .md-search { position: relative; flex: 1 1 auto; max-width: 420px; }
+      .md-search .lens {
+        position: absolute; left: 13px; top: 50%;
+        transform: translateY(-50%);
+        width: 17px; height: 17px; color: var(--md-muted); pointer-events: none;
+      }
+      .md-search .kbd {
+        position: absolute; right: 12px; top: 50%;
+        transform: translateY(-50%);
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 11px; color: var(--md-muted);
+        background: var(--md-bg2); border: 1px solid var(--md-border);
+        border-radius: 6px; padding: 2px 6px; pointer-events: none;
+      }
+      .md-search input {
+        width: 100%;
+        padding: 9px 44px 9px 38px;
+        border-radius: 999px;
+        border: 1px solid var(--md-border);
+        background: var(--md-input-bg);
+        box-shadow: var(--md-card-shadow);
+        font-size: 13.5px; color: var(--md-title);
+        outline: none;
+        transition: border-color .15s ease, box-shadow .15s ease;
+      }
+      .md-search input::placeholder { color: var(--md-muted); }
+      .md-search input:focus { border-color: var(--md-primary-soft); box-shadow: 0 0 0 3px var(--md-primary-glow); }
+
+      .md-toolbar-right { flex: 0 0 auto; display: flex; align-items: center; gap: 10px; margin-left: auto; }
+      .md-sort { position: relative; display: inline-flex; align-items: center; }
+      .md-sort svg { position: absolute; left: 11px; width: 15px; height: 15px; color: var(--md-muted); pointer-events: none; }
+      .md-sort select {
+        appearance: none; -webkit-appearance: none;
+        font-size: 13px; font-family: inherit; color: var(--md-title);
+        background: var(--md-chip-bg);
+        border: 1px solid var(--md-border); border-radius: 10px;
+        padding: 8px 28px 8px 32px;
+        cursor: pointer; outline: none;
+      }
+      .md-sort::after {
+        content: ''; position: absolute; right: 12px; top: 50%;
+        width: 7px; height: 7px;
+        transform: translateY(-70%) rotate(45deg);
+        border-right: 1.5px solid var(--md-muted);
+        border-bottom: 1.5px solid var(--md-muted);
+        pointer-events: none;
+      }
+      .md-sort select:hover { border-color: var(--md-primary-soft); }
+      .md-sort select:focus { border-color: var(--md-primary); }
+
+      .md-view { display: inline-flex; align-items: center; gap: 3px; background: var(--md-chip-bg); border: 1px solid var(--md-border); border-radius: 10px; padding: 3px; }
+      .md-view button {
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 30px; height: 27px;
+        border: none; background: transparent; border-radius: 7px; cursor: pointer;
+        color: var(--md-muted); transition: all .15s ease;
+      }
+      .md-view button svg { width: 17px; height: 17px; }
+      .md-view button:hover { color: var(--md-primary-deep); }
+      .md-view button.active { background: var(--md-card); color: var(--md-primary-deep); box-shadow: var(--md-card-shadow); }
+
+      /* ---------- 主区：侧栏 + 内容 ---------- */
+      .md-main {
+        flex: 1 1 auto;
+        min-height: 0;
+        display: flex;
+        gap: 18px;
+        margin-top: 14px;
+      }
+
+      /* 侧栏 */
+      .md-sidebar {
+        flex: 0 0 268px;
+        min-height: 0;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        padding-right: 4px;
+      }
+      .sb-card {
+        background: var(--md-card);
+        border: 1px solid var(--md-border);
+        border-radius: 12px;
+        box-shadow: var(--md-card-shadow);
         overflow: hidden;
       }
-      .md-empty { color: #9ca3af; padding: 40px 0; text-align: center; }
+      .sb-head {
+        display: flex; align-items: center; gap: 8px;
+        padding: 10px 14px;
+        border-bottom: 1px solid var(--md-border);
+        font-size: 13.5px; font-weight: 700; color: var(--md-title);
+      }
+      .sb-head svg { width: 16px; height: 16px; color: var(--md-primary-deep); flex: 0 0 auto; }
+      .sb-list { padding: 6px; display: flex; flex-direction: column; gap: 2px; }
+      a.sb-item, .sb-item {
+        padding: 8px 10px; border-radius: 8px; cursor: pointer;
+        text-decoration: none; color: inherit;
+        transition: background .15s ease;
+      }
+      a.sb-item:hover, .sb-item:hover { background: var(--md-primary-glow); }
+      .sb-item .t { font-size: 13px; font-weight: 600; color: var(--md-title); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .sb-item .m { font-size: 11.5px; color: var(--md-muted); margin-top: 3px; }
+      .sb-item .m .d { color: var(--md-primary-deep); font-weight: 600; }
+      .sb-owner { display: flex; align-items: center; gap: 9px; }
+      .sb-owner .dot {
+        flex: 0 0 auto; width: 24px; height: 24px; border-radius: 50%;
+        background: linear-gradient(135deg, var(--md-primary-soft), var(--md-primary-deep));
+        display: inline-flex; align-items: center; justify-content: center;
+        font-size: 12px; font-weight: 800; color: #fff;
+      }
+      .sb-owner .meta { min-width: 0; }
+      .sb-owner .meta .t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .sb-owner .meta .m { margin-top: 2px; }
+      .tag-cloud { display: flex; flex-wrap: wrap; gap: 7px; padding: 12px 14px; }
+      .tag-chip {
+        font-size: 12px; font-weight: 600;
+        color: var(--md-tag); background: var(--md-tag-bg);
+        border: 1px solid transparent; border-radius: 999px;
+        padding: 4px 10px; cursor: pointer; transition: all .15s ease;
+      }
+      .tag-chip:hover { border-color: var(--md-primary-soft); }
+      .tag-chip.active { background: var(--md-primary-deep); color: #fff; }
+      .tag-chip .n { opacity: .7; margin-left: 2px; }
+      .sb-empty { padding: 14px; color: var(--md-muted); font-size: 12.5px; }
+
+      /* 右内容列 */
+      .md-col { flex: 1 1 auto; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+      .md-count-line { font-size: 12.5px; color: var(--md-sub); padding: 2px 2px 10px; }
+      .md-count-line b { color: var(--md-primary-deep); font-weight: 700; }
+
+      .md-list-area { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding-right: 4px; }
+      .md-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 15px; }
+
+      /* ---------- 卡片 ---------- */
+      .md-kb-card {
+        position: relative;
+        display: flex; flex-direction: column;
+        text-decoration: none; color: inherit;
+        background: var(--md-card);
+        border: 1px solid var(--md-border);
+        border-radius: 14px;
+        overflow: hidden;
+        box-shadow: var(--md-card-shadow);
+        transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+      }
+      .md-kb-card::before {
+        content: '';
+        position: absolute; top: 0; left: 0; right: 0; height: 3px;
+        background: linear-gradient(90deg, var(--md-primary-soft), var(--md-primary-deep));
+        opacity: .85;
+        z-index: 3;
+      }
+      .md-kb-card:hover { transform: translateY(-4px); box-shadow: var(--md-card-shadow-hover); border-color: var(--md-border-strong); background: var(--md-card-hover); }
+      .md-kb-card.is-hidden { display: none; }
+
+      .md-cover { position: relative; flex: 0 0 auto; overflow: hidden; }
+      .md-cover .img-inner {
+        width: 100%;
+        aspect-ratio: 16 / 8;
+        display: flex; align-items: center; justify-content: center;
+        background:
+          radial-gradient(120% 140% at 20% 10%, var(--md-primary-soft) 0%, transparent 55%),
+          linear-gradient(135deg, #10b3a0, #103a43);
+      }
+      .md-cover img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .4s ease; }
+      .md-kb-card:hover .md-cover img { transform: scale(1.05); }
+      .md-cover .fallback { display: flex; align-items: center; justify-content: center; color: rgba(255,255,255,.92); transition: transform .4s ease; }
+      .md-kb-card:hover .md-cover .fallback { transform: scale(1.05); }
+      .md-cover .fallback svg { width: 40px; height: 40px; }
+      .md-cover-static-bg { position: absolute; inset: 0; }
+      .md-cover-chip {
+        position: absolute; top: 10px; left: 10px; z-index: 2;
+        max-width: 56%;
+        font-size: 11px; font-weight: 700; color: #fff;
+        background: rgba(0,0,0,.32);
+        border: 1px solid rgba(255,255,255,.25);
+        backdrop-filter: blur(5px);
+        padding: 2px 9px; border-radius: 999px;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      }
+      .md-cover-count {
+        position: absolute; top: 10px; right: 10px; z-index: 2;
+        display: inline-flex; align-items: center; gap: 4px;
+        font-size: 11px; font-weight: 600; color: #fff;
+        background: rgba(0,0,0,.32);
+        border: 1px solid rgba(255,255,255,.25);
+        backdrop-filter: blur(5px);
+        padding: 2px 8px; border-radius: 999px;
+      }
+      .md-cover-count svg { width: 12px; height: 12px; }
+
+      .md-body { padding: 12px 14px 0; display: flex; flex-direction: column; flex: 1 1 auto; }
+      .md-title-row { display: flex; align-items: flex-start; gap: 6px; }
+      .md-title { margin: 0 0 6px; flex: 1 1 auto; min-width: 0; font-size: 15px; font-weight: 800; color: var(--md-title); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: 38px; }
+      .md-title-badge {
+        flex: 0 0 auto; margin-top: 2px;
+        display: inline-flex; align-items: center; gap: 3px;
+        font-size: 10.5px; font-weight: 700; color: var(--md-primary-deep);
+        background: var(--md-primary-glow); border-radius: 6px;
+        padding: 2px 6px; white-space: nowrap;
+      }
+      .md-title-badge svg { width: 11px; height: 11px; }
+      .md-desc { margin: 0; min-height: 32px; font-size: 12.5px; line-height: 1.55; color: var(--md-desc); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+      .md-tags { display: flex; flex-wrap: wrap; gap: 5px; min-height: 20px; padding: 9px 0 3px; }
+      .md-tag { font-size: 11px; font-weight: 600; color: var(--md-tag); background: var(--md-tag-bg); border-radius: 999px; padding: 2px 8px; }
+
+      .md-foot { display: flex; align-items: center; gap: 8px; margin-top: 8px; padding: 9px 14px 11px; border-top: 1px dashed var(--md-border); }
+      .md-owner { display: inline-flex; align-items: center; gap: 6px; min-width: 0; font-size: 12px; font-weight: 600; color: var(--md-sub); }
+      .md-owner .dot { flex: 0 0 auto; width: 18px; height: 18px; border-radius: 50%; background: linear-gradient(135deg, var(--md-primary-soft), var(--md-primary-deep)); display: inline-flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 800; color: #fff; overflow: hidden; }
+      .md-owner .nm { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .md-foot-meta { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; flex: 0 0 auto; color: var(--md-muted); }
+      .md-time { font-size: 11.5px; }
+
+      /* ---------- 列表视图 ---------- */
+      .md-grid.is-list { grid-template-columns: 1fr; gap: 9px; }
+      .md-grid.is-list .md-kb-card { flex-direction: row; align-items: stretch; }
+      .md-grid.is-list .md-cover { flex: 0 0 150px; }
+      .md-grid.is-list .img-inner { aspect-ratio: auto; height: 100%; }
+      .md-grid.is-list .md-body { flex: 1 1 auto; min-width: 0; padding: 11px 16px 8px; }
+      .md-grid.is-list .md-title { min-height: 0; }
+      .md-grid.is-list .md-desc { min-height: 0; }
+      .md-grid.is-list .md-foot { flex: 0 0 auto; flex-direction: column; align-items: flex-end; justify-content: center; gap: 8px; margin-top: 0; border-top: none; border-left: 1px dashed var(--md-border); padding: 10px 16px; min-width: 118px; }
+      .md-grid.is-list .md-foot-meta { margin-left: 0; }
+
+      /* ---------- 分页 ---------- */
+      .md-pager-wrap { flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--md-border); }
+      .md-pager { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+      .md-pager button {
+        min-width: 30px; height: 30px; padding: 0 8px;
+        display: inline-flex; align-items: center; justify-content: center;
+        font-size: 13px; font-weight: 600; font-family: inherit;
+        color: var(--md-sub); background: var(--md-card);
+        border: 1px solid var(--md-border); border-radius: 8px; cursor: pointer;
+        transition: all .15s ease;
+      }
+      .md-pager button:hover:not(:disabled):not(.active) { border-color: var(--md-primary-soft); color: var(--md-primary-deep); }
+      .md-pager button.active { background: linear-gradient(135deg, var(--md-primary-soft), var(--md-primary-deep)); border-color: transparent; color: #fff; box-shadow: 0 4px 12px var(--md-primary-glow); }
+      .md-pager button:disabled { opacity: .4; cursor: not-allowed; }
+      .md-pager button.sep { border: none; background: none; pointer-events: none; }
+      .md-count { font-size: 13px; color: var(--md-sub); }
+      .md-count b { color: var(--md-primary-deep); font-weight: 700; }
+
+      .md-empty {
+        display: none;
+        flex-direction: column; align-items: center; justify-content: center;
+        text-align: center; color: var(--md-muted);
+        min-height: 240px; padding: 40px 20px; font-size: 14px;
+      }
+      .md-empty svg { width: 46px; height: 46px; margin-bottom: 14px; opacity: .5; }
+      .md-empty .md-empty-text { max-width: 340px; line-height: 1.7; }
+
+      @media (max-width: 1080px) {
+        .md-stats { grid-template-columns: repeat(3, 1fr); }
+        .md-sidebar { display: none; }
+      }
+      @media (max-width: 640px) {
+        .md-content { padding: 12px 12px 8px; }
+        .md-toolbar { flex-wrap: wrap; }
+        .md-search { flex: 1 1 100%; }
+        .md-stats { grid-template-columns: repeat(2, 1fr); }
+      }
     </style>
   </th:block>
 
   <th:block th:fragment="content">
-    <div class="md-kb-list">
-      <h1>知识库</h1>
-      <div class="md-kb-grid"
-           th:with="result=${minidocsFinder.listKnowledgeBases(1, 100)}">
-        <a class="md-kb-card"
-           th:each="kb : ${result.items}"
-           th:href="@{'/docs/view/' + ${kb.spec.slug != null && !kb.spec.slug.isEmpty() ? kb.spec.slug : kb.metadata.name}}">
-          <img class="md-kb-cover"
-               th:if="${kb.spec.cover != null and !kb.spec.cover.isEmpty()}"
-               th:src="${kb.spec.cover}" alt="">
-          <div class="md-kb-body">
-            <p class="md-kb-title" th:text="${kb.spec.displayName}"></p>
-            <p class="md-kb-desc" th:text="${kb.spec.description} ?: '暂无简介'"></p>
-          </div>
+    <div class="md-app"
+         th:with="result=${minidocsFinder.listKnowledgeBases(1, 1000)}">
+      <nav class="site-nav">
+        <a class="nav-brand" th:href="@{/}">
+          <img th:if="${site.logo != null and !#strings.isEmpty(site.logo)}"
+               th:src="${site.logo}" alt="logo">
+          <span class="nav-logo-fallback"
+                th:unless="${site.logo != null and !#strings.isEmpty(site.logo)}"
+                th:text="${site.title != null and !#strings.isEmpty(site.title) ? #strings.substring(site.title, 0, 1) : '知'}">知</span>
+          <span class="nav-title" th:text="${#strings.defaultString(site.title, '知识库')}">知识库</span>
         </a>
-        <div th:if="${result.items.isEmpty()}" class="md-empty">暂无公开知识库。</div>
+        <div class="nav-user">
+          <span class="dot"></span>
+          <span class="name" th:text="${#strings.defaultString(loginUser, '未登录')}">未登录</span>
+        </div>
+      </nav>
+
+      <div class="md-content">
+        <div class="md-stats">
+          <div class="md-stat">
+            <span class="md-stat-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></span>
+            <div style="min-width:0"><div class="md-stat-val" id="md-stat-kb">0</div><div class="md-stat-label">知识库总数</div></div>
+          </div>
+          <div class="md-stat">
+            <span class="md-stat-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 13h6M9 17h4"/></svg></span>
+            <div style="min-width:0"><div class="md-stat-val" id="md-stat-docs">0</div><div class="md-stat-label">总文档数</div></div>
+          </div>
+          <div class="md-stat">
+            <span class="md-stat-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><circle cx="7" cy="7" r=".5" fill="currentColor"/></svg></span>
+            <div style="min-width:0"><div class="md-stat-val" id="md-stat-tags">0</div><div class="md-stat-label">分类标签</div></div>
+          </div>
+          <div class="md-stat">
+            <span class="md-stat-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span>
+            <div style="min-width:0"><div class="md-stat-val" id="md-stat-avg">0</div><div class="md-stat-label">平均文档/库</div></div>
+          </div>
+          <div class="md-stat">
+            <span class="md-stat-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12l2.5-2.5L8 12l3-3 3 3 2-2 3 3"/><path d="M4 20h16"/><path d="M4 20V8"/></svg></span>
+            <div style="min-width:0"><div class="md-stat-val is-text" id="md-stat-hot" title="">-</div><div class="md-stat-label">最热知识库</div></div>
+          </div>
+          <div class="md-stat">
+            <span class="md-stat-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg></span>
+            <div style="min-width:0"><div class="md-stat-val is-text" id="md-stat-new">-</div><div class="md-stat-label">最近更新</div></div>
+          </div>
+        </div>
+
+        <div class="md-toolbar">
+          <div class="md-sec-title">
+            <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-6 9 6v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9z"/><path d="M9 21V12h6v9"/></svg></span>
+            <span>知识库中心</span>
+          </div>
+          <div class="md-search">
+            <svg class="lens" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.1" y2="16.1"></line></svg>
+            <input type="search" id="md-search-input" placeholder="搜索知识库，或输入标签筛选..." aria-label="搜索知识库">
+            <span class="kbd" id="md-kbd">/</span>
+          </div>
+          <div class="md-toolbar-right">
+            <label class="md-sort">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v3l-4 8h8l-4-8V3"/><path d="M16 12h6M19 9v6"/></svg>
+              <select id="md-sort" aria-label="排序方式">
+                <option value="update" selected>最近更新</option>
+                <option value="docs">文档最多</option>
+                <option value="name">名称 A-Z</option>
+                <option value="created">最新创建</option>
+              </select>
+            </label>
+            <div class="md-view" aria-label="视图切换">
+              <button type="button" data-view="card" class="active" title="卡片视图"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></button>
+              <button type="button" data-view="list" title="列表视图"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="3" cy="6" r="1" fill="currentColor"/><circle cx="3" cy="12" r="1" fill="currentColor"/><circle cx="3" cy="18" r="1" fill="currentColor"/></svg></button>
+            </div>
+          </div>
+        </div>
+
+        <div class="md-main">
+          <!-- 左侧信息侧栏 -->
+          <aside class="md-sidebar">
+            <div class="sb-card">
+              <div class="sb-head">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12l2.5-2.5L8 12l3-3 3 3 2-2 3 3"/><path d="M4 20h16"/></svg>
+                最新更新
+              </div>
+              <div class="sb-list" id="sb-recent"></div>
+            </div>
+
+            <div class="sb-card">
+              <div class="sb-head">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18 15 15 0 0 1 0-18z"/></svg>
+                标签分类
+              </div>
+              <div class="tag-cloud" id="sb-tags"></div>
+            </div>
+
+            <div class="sb-card">
+              <div class="sb-head">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                贡献者
+              </div>
+              <div class="sb-list" id="sb-owners"></div>
+            </div>
+          </aside>
+
+          <!-- 右内容 -->
+          <section class="md-col">
+            <div class="md-count-line">
+              共 <b id="md-count">0</b> 个知识库
+            </div>
+            <div class="md-list-area" id="md-list-area">
+              <div class="md-grid is-card" id="md-grid">
+                <a class="md-kb-card"
+                   th:each="kb : ${result.items}"
+                   th:attr="data-search=${kb.spec.displayName} + ' ' +
+                             ${kb.spec.description != null ? kb.spec.description : ''} + ' ' +
+                             ${kb.spec.tags != null ? #strings.listJoin(kb.spec.tags, ' ') : ''} + ' ' +
+                             ${kb.spec.creatorName != null ? kb.spec.creatorName : ''},
+                     data-tags=${kb.spec.tags != null ? #strings.listJoin(kb.spec.tags, ' ') : ''},
+                     data-owner=${kb.spec.creatorName != null ? kb.spec.creatorName : ''},
+                     data-name=${#strings.toLowerCase(kb.spec.displayName)},
+                     data-docs=${kb.status != null and kb.status.docCount != null ? kb.status.docCount : 0},
+                     data-update=${kb.spec.updateTime != null ? kb.spec.updateTime : ''},
+                     data-created=${kb.spec.creationTime != null ? kb.spec.creationTime : ''}"
+                   th:href="@{'/docs/view/' +
+                             ${kb.spec.slug != null && !kb.spec.slug.isEmpty()
+                               ? kb.spec.slug : kb.metadata.name}}">
+                  <div class="md-cover"
+                       th:if="${kb.spec.cover != null and !kb.spec.cover.isEmpty()}">
+                    <div class="img-inner"><img th:src="${kb.spec.cover}" alt="" loading="lazy"></div>
+                  </div>
+                  <div class="md-cover md-cover-static"
+                       th:unless="${kb.spec.cover != null and !kb.spec.cover.isEmpty()}">
+                    <span class="md-cover-static-bg" aria-hidden="true"></span>
+                    <div class="img-inner">
+                      <span class="fallback">
+                        <svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zM9 6v2h6V6H9zm0 5c-.6 0-1 .4-1 1s.4 1 1 1h6a1 1 0 0 0 0-2H9zm0 4c-.6 0-1 .4-1 1s.4 1 1 1h4a1 1 0 0 0 0-2H9z" fill="currentColor"/>
+                        </svg>
+                      </span>
+                    </div>
+                  </div>
+                  <span class="md-cover-chip"
+                        th:if="${kb.spec.tags != null and !kb.spec.tags.isEmpty()}"
+                        th:text="${kb.spec.tags[0]}"></span>
+                  <span class="md-cover-count">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+                    <span th:text="${kb.status != null and kb.status.docCount != null ? kb.status.docCount : 0}">0</span>
+                  </span>
+                  <div class="md-body">
+                    <div class="md-title-row">
+                      <h3 class="md-title" th:text="${kb.spec.displayName}"></h3>
+                      <span class="md-title-badge">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+                        <span th:text="${kb.status != null and kb.status.docCount != null ? kb.status.docCount : 0}">0</span>
+                      </span>
+                    </div>
+                    <p class="md-desc" th:text="${kb.spec.description != null and !kb.spec.description.isEmpty() ? kb.spec.description : '暂无简介'}">暂无简介</p>
+                  </div>
+                  <div class="md-foot">
+                    <span class="md-owner">
+                      <span class="dot" th:text="${kb.spec.creatorName != null ? #strings.substring(kb.spec.creatorName, 0, 1) : ''}"></span>
+                      <span class="nm" th:text="${kb.spec.creatorName}"></span>
+                    </span>
+                    <span class="md-foot-meta">
+                      <time class="md-time" th:attr="datetime=${kb.spec.updateTime}"></time>
+                    </span>
+                  </div>
+                </a>
+
+                <div class="md-empty" id="md-empty" style="display:none">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><circle cx="7" cy="7" r=".5" fill="currentColor"/></svg>
+                  <span class="md-empty-text">暂无公开知识库，去管理后台创建第一个吧。</span>
+                </div>
+              </div>
+            </div>
+
+            <nav class="md-pager-wrap">
+              <div class="md-pager" id="md-pager"></div>
+              <span class="md-count" id="md-count-total"></span>
+            </nav>
+          </section>
+        </div>
       </div>
     </div>
+
+    <script>
+      (function () {
+        var grid = document.getElementById('md-grid');
+        if (!grid) return;
+        var all = Array.prototype.slice.call(grid.querySelectorAll('.md-kb-card'));
+        var state = { q: '', tag: '', owner: '', sort: 'update', page: 1, perPage: 9, view: 'card' };
+
+        var PALETTE = [
+          'linear-gradient(135deg,#0f766e,#14b8a6)',
+          'linear-gradient(135deg,#0e7490,#22d3ee)',
+          'linear-gradient(135deg,#4f46e5,#38bdf8)',
+          'linear-gradient(135deg,#7c3aed,#f472b6)',
+          'linear-gradient(135deg,#b45309,#f59e0b)',
+          'linear-gradient(135deg,#15803d,#4ade80)',
+          'linear-gradient(135deg,#be123c,#fb7185)',
+          'linear-gradient(135deg,#334155,#64748b)',
+          'linear-gradient(135deg,#0f172a,#0f766e)'
+        ];
+        function hash(s) { var h = 0; for (var i = 0; i < s.length; i++) { h = (h * 31 + s.charCodeAt(i)) | 0; } return Math.abs(h); }
+        function pad(n) { return n < 10 ? '0' + n : n; }
+        function nowDate() { return new Date(); }
+        function enc(_s) { try { return encodeURIComponent(_s); } catch (e) { return _s; } }
+
+        /* 准备卡片数据缓存 */
+        var cards = all.map(function (c) {
+          return {
+            el: c,
+            search: (c.dataset.search || '').toLowerCase(),
+            tags: (c.dataset.tags || '').trim().split(/\s+/).filter(Boolean),
+            owner: c.dataset.owner || '',
+            name: c.dataset.name || '',
+            docs: parseInt(c.dataset.docs || '0', 10),
+            update: Date.parse(c.dataset.update || '') || 0,
+            created: Date.parse(c.dataset.created || '') || 0,
+            href: c.getAttribute('href')
+          };
+        });
+
+        function relTime(iso, fallback) {
+          var d = new Date(iso);
+          if (isNaN(d.getTime())) return fallback;
+          var now = nowDate();
+          if (d.toDateString() === now.toDateString()) return '今天 ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+          var yest = new Date(now.getTime() - 86400000);
+          if (d.toDateString() === yest.toDateString()) return '昨天 ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+          if (d.getFullYear() === now.getFullYear()) return pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+          return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+        }
+
+        /* 无封面渐变 + 时间 */
+        cards.forEach(function (card) {
+          var staticBg = card.el.querySelector('.md-cover-static .md-cover-static-bg');
+          if (staticBg) staticBg.style.background = PALETTE[hash(card.name || card.search) % PALETTE.length];
+          var t = card.el.querySelector('.md-time');
+          if (t) t.textContent = card.update ? relTime(new Date(card.update).toISOString(), '') : '';
+        });
+
+        /* ---- 顶部看板 ---- */
+        var totalKb = cards.length;
+        var totalDocs = cards.reduce(function (s, c) { return s + c.docs; }, 0);
+        var tagCounter = {};
+        var ownerCounter = {};
+        cards.forEach(function (c) {
+          c.tags.forEach(function (t) { tagCounter[t] = (tagCounter[t] || 0) + 1; });
+          if (c.owner) ownerCounter[c.owner] = (ownerCounter[c.owner] || 0) + 1;
+        });
+        var tagList = Object.keys(tagCounter).sort(function (a, b) { return tagCounter[b] - tagCounter[a] || a.localeCompare(b); });
+        var ownerList = Object.keys(ownerCounter).sort(function (a, b) { return ownerCounter[b] - ownerCounter[a] || a.localeCompare(b); });
+        var hot = cards.slice().sort(function (a, b) { return b.docs - a.docs; })[0];
+        var latestUpdate = cards.reduce(function (mx, c) { return c.update > mx ? c.update : mx; }, 0);
+
+        document.getElementById('md-stat-kb').textContent = totalKb;
+        document.getElementById('md-stat-docs').textContent = totalDocs;
+        document.getElementById('md-stat-tags').textContent = tagList.length;
+        document.getElementById('md-stat-avg').textContent = totalKb ? Math.round(totalDocs / totalKb * 10) / 10 : 0;
+        var hotEl = document.getElementById('md-stat-hot');
+        hotEl.textContent = hot && totalKb ? hot.el.querySelector('.md-title').textContent : '-';
+        hotEl.title = hot && totalKb ? hot.name : '';
+        var newEl = document.getElementById('md-stat-new');
+        newEl.textContent = latestUpdate ? relTime(new Date(latestUpdate).toISOString(), '-') : '-';
+
+        /* ---- 侧栏：标签云 ---- */
+        var tagCloud = document.getElementById('sb-tags');
+        if (tagCloud) {
+          if (!tagList.length) { tagCloud.innerHTML = '<div class="sb-empty">暂无标签</div>'; }
+          else tagList.forEach(function (tag) {
+            var chip = document.createElement('button');
+            chip.type = 'button';
+            chip.className = 'tag-chip';
+            chip.innerHTML = enc(tag) + '<span class="n">' + tagCounter[tag] + '</span>';
+            chip.addEventListener('click', function () {
+              state.tag = state.tag === tag ? '' : tag;
+              state.page = 1;
+              document.querySelectorAll('.tag-chip').forEach(function (b) {
+                b.classList.toggle('active', (b.getAttribute('data-tag') || '') === state.tag);
+              });
+              render();
+            });
+            chip.setAttribute('data-tag', tag);
+            chip.innerHTML = tag + '<span class="n">' + tagCounter[tag] + '</span>';
+            tagCloud.appendChild(chip);
+          });
+        }
+
+        /* ---- 侧栏：最新更新 ---- */
+        var recentEl = document.getElementById('sb-recent');
+        if (recentEl) {
+          var recent = cards.slice().sort(function (a, b) { return b.update - a.update; }).slice(0, 6).filter(function (c) { return c.update > 0; });
+          if (!recent.length) recentEl.innerHTML = '<div class="sb-empty">暂无数据</div>';
+          else recent.forEach(function (c) {
+            var a = document.createElement('a');
+            a.className = 'sb-item';
+            a.href = c.href;
+            var t = document.createElement('div'); t.className = 't'; t.textContent = c.el.querySelector('.md-title').textContent;
+            var m = document.createElement('div'); m.className = 'm';
+            m.textContent = c.docs + ' 篇文档 · ' + relTime(new Date(c.update).toISOString(), '');
+            a.appendChild(t); a.appendChild(m);
+            recentEl.appendChild(a);
+          });
+        }
+
+        /* ---- 侧栏：贡献者 ---- */
+        var ownersEl = document.getElementById('sb-owners');
+        if (ownersEl) {
+          if (!ownerList.length) ownersEl.innerHTML = '<div class="sb-empty">暂无数据</div>';
+          else ownerList.forEach(function (owner) {
+            var item = document.createElement('div');
+            item.className = 'sb-item sb-owner';
+            item.setAttribute('data-owner', owner);
+            item.innerHTML =
+              '<span class="dot">' + (owner.charAt(0) || '?').toUpperCase() + '</span>' +
+              '<span class="meta"><span class="t">' + owner + '</span>' +
+              '<span class="m">' + ownerCounter[owner] + ' 个知识库</span></span>';
+            item.addEventListener('click', function () {
+              state.owner = state.owner === owner ? '' : owner;
+              state.page = 1;
+              document.querySelectorAll('.sb-owner').forEach(function (o) {
+                o.classList.toggle('active', o.getAttribute('data-owner') === state.owner);
+              });
+              render();
+            });
+            ownersEl.appendChild(item);
+          });
+        }
+        var ownerCss = document.createElement('style');
+        ownerCss.textContent = '.sb-owner.active{background:var(--md-primary-glow)}';
+        document.head.appendChild(ownerCss);
+
+        /* ---- 筛选 / 排序 / 分页 ---- */
+        function matches(c) {
+          if (state.q && c.search.indexOf(state.q) === -1) return false;
+          if (state.tag && c.tags.indexOf(state.tag) === -1) return false;
+          if (state.owner && c.owner !== state.owner) return false;
+          return true;
+        }
+        function sorter(a, b) {
+          switch (state.sort) {
+            case 'name': return (a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
+            case 'docs': return b.docs - a.docs;
+            case 'created': return b.created - a.created;
+            default: return b.update - a.update;
+          }
+        }
+
+        var countEl = document.getElementById('md-count');
+        var countTotalEl = document.getElementById('md-count-total');
+        var emptyEl = document.getElementById('md-empty');
+        var listArea = document.getElementById('md-list-area');
+        var pagerEl = document.getElementById('md-pager');
+        var gridEl = document.getElementById('md-grid');
+
+        function render() {
+          var pool = cards.filter(matches);
+          pool.sort(sorter);
+          var pages = Math.max(1, Math.ceil(pool.length / state.perPage));
+          if (state.page > pages) state.page = pages;
+          var start = (state.page - 1) * state.perPage;
+          var shown = pool.slice(start, start + state.perPage);
+
+          cards.forEach(function (c) { c.el.classList.add('is-hidden'); });
+          shown.forEach(function (c) { c.el.classList.remove('is-hidden'); });
+
+          var total = pool.length;
+          countEl.textContent = total;
+          if (countTotalEl) countTotalEl.textContent = total ? ((start + 1) + '-' + (start + shown.length) + ' / ' + total) : '0';
+          if (emptyEl) {
+            emptyEl.style.display = total ? 'none' : 'flex';
+            if (!total) {
+              var t = emptyEl.querySelector('.md-empty-text');
+              if (t) {
+                t.textContent = (state.q || state.tag || state.owner)
+                  ? (state.tag ? '没有找到标签为「' + state.tag + '」的知识库，试试其他标签或清除筛选。'
+                      : (state.owner ? '「' + state.owner + '」暂无公开知识库。'
+                          : '没有找到与「' + input.value.trim() + '」相关的知识库，换个关键词试试。'))
+                  : '暂无公开知识库，去管理后台创建第一个吧。';
+              }
+            }
+          }
+          buildPager(pages);
+          /* 按当前排序/筛选物理重排卡片节点，使顺序变化在视觉上可见 */
+          var order = shown.map(function (c) { return c.el; });
+          cards.forEach(function (c) { if (shown.indexOf(c) === -1) order.push(c.el); });
+          if (emptyEl) order.push(emptyEl);
+          order.forEach(function (el) { gridEl.appendChild(el); });
+          listArea.scrollTop = 0;
+        }
+
+        function buildPager(pages) {
+          var buttons = [];
+          var cur = state.page;
+          var add = function (b) { buttons.push(b); return b; };
+          var nav = function (label, dir, disabled) {
+            var b = document.createElement('button');
+            b.type = 'button'; b.innerHTML = dir < 0 ? '‹' : '›';
+            b.setAttribute('aria-label', label);
+            if (disabled) b.disabled = true;
+            else b.addEventListener('click', function () { state.page = cur + dir; render(); });
+            add(b);
+          };
+          var num = function (n, active) {
+            var b = document.createElement('button');
+            b.type = 'button'; b.textContent = n;
+            if (active) b.className = 'active';
+            b.addEventListener('click', function () { state.page = n; render(); });
+            add(b);
+          };
+          var sep = function () {
+            var s = document.createElement('button'); s.type = 'button'; s.className = 'sep';
+            s.textContent = '…'; s.disabled = true; add(s);
+          };
+
+          nav('上一页', -1, cur <= 1);
+          if (pages <= 7) { for (var i = 1; i <= pages; i++) num(i, i === cur); }
+          else {
+            num(1, cur === 1);
+            if (cur > 3) sep();
+            for (var i = Math.max(2, cur - 1); i <= Math.min(pages - 1, cur + 1); i++) num(i, i === cur);
+            if (cur < pages - 2) sep();
+            num(pages, cur === pages);
+          }
+          nav('下一页', 1, cur >= pages);
+
+          pagerEl.innerHTML = '';
+          buttons.forEach(function (b) { pagerEl.appendChild(b); });
+        }
+
+        /* 搜索 */
+        var input = document.getElementById('md-search-input');
+        input.addEventListener('input', function () { state.q = input.value.trim().toLowerCase(); state.page = 1; render(); });
+        document.addEventListener('keydown', function (e) { if (e.key === '/' && document.activeElement !== input) { e.preventDefault(); input.focus(); } });
+
+        /* 排序 */
+        document.getElementById('md-sort').addEventListener('change', function (e) { state.sort = e.target.value; state.page = 1; render(); });
+
+        /* 视图切换 */
+        var viewBtns = document.querySelectorAll('.md-view button');
+        function applyView(v) {
+          gridEl.classList.toggle('is-card', v === 'card');
+          gridEl.classList.toggle('is-list', v === 'list');
+          viewBtns.forEach(function (b) { b.classList.toggle('active', b.getAttribute('data-view') === v); });
+        }
+        viewBtns.forEach(function (b) {
+          b.addEventListener('click', function () { state.view = b.getAttribute('data-view'); applyView(state.view); });
+        });
+
+        render();
+      })();
+    </script>
   </th:block>
 </html>

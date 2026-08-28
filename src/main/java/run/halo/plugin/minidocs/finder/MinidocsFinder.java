@@ -54,9 +54,9 @@ public class MinidocsFinder {
     /**
      * 已发布文档详情。
      */
-    public Mono<KnowledgeBaseDoc> getDoc(String kbSlug, String docName) {
+    public Mono<KnowledgeBaseDoc> getDocBySlug(String kbSlug, String docSlug) {
         return knowledgeBaseService.getBySlugOrName(kbSlug)
-            .flatMap(kb -> docService.getPublishedDoc(kb.getMetadata().getName(), docName));
+            .flatMap(kb -> docService.getPublishedDocBySlug(kb.getMetadata().getName(), docSlug));
     }
 
     /**

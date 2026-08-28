@@ -17,13 +17,13 @@
 | 端点 | 方法 | 说明 |
 | --- | --- | --- |
 | `/apis/api.minidocs.halo.run/v1alpha1/knowledgebases` | `GET` | 分页列出公开知识库；支持 `keyword`、`page`、`size` 查询参数 |
-| `/apis/api.minidocs.halo.run/v1alpha1/knowledgebases/{name}` | `GET` | 获取单个公开知识库详情；非公开知识库返回 `404` |
-| `/apis/api.minidocs.halo.run/v1alpha1/knowledgebases/{name}/tree` | `GET` | 获取该知识库已发布文档的文档树（递归嵌套） |
-| `/apis/api.minidocs.halo.run/v1alpha1/knowledgebases/{name}/docs` | `GET` | 分页列出该知识库已发布文档；支持 `keyword`、`page`、`size` |
-| `/apis/api.minidocs.halo.run/v1alpha1/knowledgebases/{name}/docs/{docName}` | `GET` | 获取单篇已发布文档 |
-| `/apis/api.minidocs.halo.run/v1alpha1/docs/{slug}` | `GET` | 按 slug 直接获取已发布文档（所属知识库须公开） |
+| `/apis/api.minidocs.halo.run/v1alpha1/knowledgebases/{kbSlug}` | `GET` | 获取单个公开知识库详情；非公开知识库返回 `404` |
+| `/apis/api.minidocs.halo.run/v1alpha1/knowledgebases/{kbSlug}/tree` | `GET` | 获取该知识库已发布文档的文档树（递归嵌套） |
+| `/apis/api.minidocs.halo.run/v1alpha1/knowledgebases/{kbSlug}/docs` | `GET` | 分页列出该知识库已发布文档；支持 `keyword`、`page`、`size` |
+| `/apis/api.minidocs.halo.run/v1alpha1/knowledgebases/{kbSlug}/docs/{docSlug}` | `GET` | 获取单篇已发布文档（按文档 `spec.slug` 取，并校验归属该知识库） |
+| `/apis/api.minidocs.halo.run/v1alpha1/docs/{docSlug}` | `GET` | 按 `docSlug` 直接获取已发布文档（所属知识库须公开） |
 
-> 路径中的 `{name}` 为知识库的 `metadata.name`；`{docName}` 为文档的 `metadata.name`；`{slug}` 为文档的 `spec.slug`。
+> 路径约定：公共 API 统一使用 **slug 字段**（URL 友好标识）查询——**知识库标识用 `{kbSlug}`**、**文档标识用 `{docSlug}`**，分别对应资源的 `spec.slug`。`{kbSlug}` 兼容 `metadata.name` 或 `spec.slug`（经 `getBySlugOrName` 解析）；`{docSlug}` 严格按 `spec.slug` 定位，并额外校验文档归属指定的知识库。
 
 ### 匿名访问说明
 
@@ -40,7 +40,9 @@
 
 列表端点支持通过 `page`、`size` 查询参数分页，`page` 从 `1` 开始，默认 `size=20`。
 
-排序字段为 `spec.priority`，值越小越靠前；知识库与文档均按 `priority`、创建时间、`metadata.name` 升序排列。公开 API 暂未开放 `sort` 参数自定义，统一按上述规则返回。
+排序字段为 `spec.priority`，值越小越靠前；知识库与文档均按 `spec.priority`、`metadata.name` 升序排列。公开 API 暂未开放 `sort` 参数自定义，统一按上述规则返回。
+
+Console API 的 `GET /knowledgebases` 额外支持 `sortBy` 查询参数，可选值：`updateTime`（默认，按 `updateTime` 倒序）、`name`（按 `displayName` 升序）、`priority`（按 `priority` 升序）、`createTime`（按 `creationTime` 倒序）、`docCount`（按文档数倒序）。`sortBy` 仅作用于管理后台的知识库列表，不影响文档列表与公开 API。
 
 ### 请求示例
 
@@ -68,15 +70,17 @@ Console API 位于 `console.api.minidocs.halo.run/v1alpha1`，供 Console 前端
 
 | 端点 | 方法 | 说明 |
 | --- | --- | --- |
-| `/apis/console.api.minidocs.halo.run/v1alpha1/knowledgebases/stats` | `GET` | 聚合统计（总数、公开/私有数、文档数、月度环比 `kbGrowth`/`docGrowth`） |
-| `/apis/console.api.minidocs.halo.run/v1alpha1/knowledgebases` | `GET` | 分页列出知识库；支持 `keyword`、`publicVisible`、`page`、`size` |
+| `/apis/console.api.minidocs.halo.run/v1alpha1/knowledgebases/stats` | `GET` | 聚合统计（总数、公开/私有数、文档数、月度环比 `kbGrowth`/`docGrowth`、公开占比 `publicRatio`） |
+| `/apis/console.api.minidocs.halo.run/v1alpha1/knowledgebases` | `GET` | 分页列出知识库；支持 `keyword`、`publicVisible`、`page`、`size`、`sortBy` |
 | `/apis/console.api.minidocs.halo.run/v1alpha1/knowledgebases/{name}` | `GET` | 获取单个知识库（含私有） |
 | `/apis/console.api.minidocs.halo.run/v1alpha1/knowledgebases` | `POST` | 创建知识库 |
 | `/apis/console.api.minidocs.halo.run/v1alpha1/knowledgebases/{name}` | `PUT` | 整体更新知识库 `spec` |
 | `/apis/console.api.minidocs.halo.run/v1alpha1/knowledgebases/{name}` | `DELETE` | 删除知识库（级联删除其下文档） |
 | `/apis/console.api.minidocs.halo.run/v1alpha1/knowledgebases/import` | `POST` | 批量导入整个知识库（multipart ZIP 上传，创建新知识库及其文档） |
 | `/apis/console.api.minidocs.halo.run/v1alpha1/knowledgebases/import/preview` | `POST` | 导入预览（multipart ZIP 上传，仅解析并返回待导入内容清单，不写入） |
-| `/apis/console.api.minidocs.halo.run/v1alpha1/knowledgebases/export` | `POST` | 导出整个知识库为 ZIP（受基础设置项 `allowDocExport` 约束） |
+| `/apis/console.api.minidocs.halo.run/v1alpha1/knowledgebases/export` | `POST` | 批量导出知识库为 ZIP（JSON body `{ "names": [...] }`，受基础设置项 `allowDocExport` 约束） |
+
+> 路径中的 `{name}` 支持知识库的 `metadata.name` 或 `spec.slug`（经 `getBySlugOrName` 解析）。
 
 #### 文档（`KnowledgeBaseDocConsoleEndpoint`）
 
@@ -107,27 +111,38 @@ Console API 位于 `console.api.minidocs.halo.run/v1alpha1`，供 Console 前端
 
 ### 写操作请求体
 
-创建 / 更新知识库（`POST` / `PUT /knowledgebases/{name}`）请求体为 `KnowledgeBase` JSON，`metadata.name` 创建时可省略，由服务端生成；更新时与路径 `{name}` 保持一致：
+创建 / 更新知识库（`POST` / `PUT /knowledgebases/{name}`）请求体为 `KnowledgeBase` JSON，`metadata.name` 创建时可省略，由服务端生成；更新时路径 `{name}` 支持 `metadata.name` 或 `spec.slug`。`spec` 主要字段：
+
+- `displayName`（必填）：知识库名称，最长 100 字符。
+- `slug`（可选）：链接别名（URL 友好标识，下文称 `kbSlug`），留空时系统自动生成；用于前台 `/docs/view/{kbSlug}` 等路由。
+- `description` / `logo` / `cover`：描述、图标、封面图地址。
+- `publicVisible`：是否公开可见，默认 `false`。
+- `members`：私有知识库可访问的成员用户名列表。
+- `tags`：标签列表。
+- `priority`：排序权重，越小越靠前。
+- `creatorName` / `creationTime` / `updateTime`：创建人、创建时间、最后更新时间（时间字段系统自动写入）。
 
 ```json
 {
   "spec": {
     "displayName": "我的知识库",
+    "slug": "my-kb",
     "description": "由主题端创建的投稿知识库",
+    "cover": "https://example.com/cover.png",
     "publicVisible": false,
     "tags": ["投稿"]
   }
 }
 ```
 
-创建文档（`POST /knowledgebases/{name}/docs`）请求体为 `KnowledgeBaseDoc` JSON，`spec.phase` 默认草稿（`draft`）：
+创建文档（`POST /knowledgebases/{name}/docs`）请求体为 `KnowledgeBaseDoc` JSON，`spec.phase` 默认草稿（`draft`）。`spec` 主要字段：`knowledgeBaseName`（必填，所属知识库名）、`title`（必填）、`slug`、`author`、`cover`、`summary`、`raw`（原始 Markdown 文本）、`content`（渲染后的 HTML，由编辑器生成并保存）、`parentName`（父文档名，空为顶级）、`priority`、`tags`、`phase`：
 
 ```json
 {
   "spec": {
     "title": "第一篇投稿",
     "slug": "my-first-post",
-    "content": "# 标题\n正文内容…",
+    "raw": "# 标题\n正文内容…",
     "phase": "draft"
   }
 }
@@ -150,7 +165,26 @@ Console API 位于 `console.api.minidocs.halo.run/v1alpha1`，供 Console 前端
 
 ### 导出说明
 
-`export` 接口导出单篇文档的 Markdown。若插件设置「允许导出文档」（`allowDocExport`，由 `BasicSetting.docExportEnabled()` 判断，默认 `true`）关闭，单篇 `export` 接口与 Console 导出入口、以及知识库级 `/knowledgebases/export` 均返回 `403`。
+知识库级导出（`POST /knowledgebases/export`）请求体为 JSON，接收知识库名称数组，将选中知识库（含其文档）打包为 ZIP 返回：
+
+```json
+{
+  "names": ["kb-abc", "kb-def"]
+}
+```
+
+> 路径 `/knowledgebases/export` 接受 `names` 数组（支持 `metadata.name` 或 `spec.slug`），可一次导出多个知识库。
+
+若插件设置「允许导出文档」（`allowDocExport`，由 `BasicSetting.docExportEnabled()` 判断，默认 `true`）关闭，批量 `export` 接口与 Console 导出入口、以及单篇文档 `GET /docs/{docName}/export` 均返回 `403`。
+
+### 导入说明
+
+知识库级导入（`POST /knowledgebases/import`，multipart 表单）除上传的 ZIP 文件（`file` 字段）外，还支持 `strategy` 表单字段控制同名冲突策略：
+
+- `overwrite`（默认）：导入时若知识库或文档已存在则覆盖更新。
+- `skip`：已存在则跳过，仅创建不存在的部分。
+
+导入预览（`POST /knowledgebases/import/preview`）仅解析 ZIP 并返回待导入清单（知识库与文档元信息），不写入数据，便于前端确认冲突与数量。文档级导入（`POST /knowledgebases/{name}/docs/import`，multipart 文件上传）复用相同策略逻辑。
 
 ## 标准 CRUD 端点（需要认证）
 
@@ -169,9 +203,10 @@ Console API 位于 `console.api.minidocs.halo.run/v1alpha1`，供 Console 前端
 | --- | --- |
 | `200` | 成功 |
 | `201` | 创建成功（写操作） |
-| `400` | 请求参数错误（如移动到非法父节点） |
-| `401` / `403` | 未登录 / 无权限（匿名阅读关闭或未授予角色） |
-| `404` | 知识库或文档不存在（含非公开知识库） |
+| `400` | 请求参数错误（如移动到非法父节点、导入文件解析失败） |
+| `401` / `403` | 未登录 / 无权限（匿名阅读关闭或未授予角色、导出被设置禁用） |
+| `404` | 知识库或文档不存在（含非公开知识库、slug 无法解析） |
+| `409` | 资源冲突（如导入 `strategy=skip` 时同名知识库已存在） |
 
 Halo 使用 `application/problem+json` 返回结构化错误，客户端可读取 `status` 与 `type` 做程序判断，`detail` 作为可展示文案。
 

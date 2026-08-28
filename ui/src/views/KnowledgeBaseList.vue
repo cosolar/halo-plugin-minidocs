@@ -32,6 +32,7 @@ import { utils } from "@halo-dev/ui-shared";
 import UserSelect from "../components/UserSelect.vue";
 import TagInput from "../components/TagInput.vue";
 import PaginationBar from "../components/PaginationBar.vue";
+import { renderMarkdownToHtml } from "../utils/mdRenderer";
 
 interface Stats {
   total: number;
@@ -176,6 +177,78 @@ function exportTimestamp() {
   )}${p(d.getMinutes())}${p(d.getSeconds())}${p(d.getMilliseconds(), 3)}`;
 }
 
+// 一键发布：用前端 cherry 渲染每篇文档的 raw 生成 HTML 保存，并把未发布的文档转为已发布
+const publishing = ref(false);
+async function publishSelected() {
+  if (!selectedNames.value.length) {
+    Toast.warning("请先勾选要发布的知识库");
+    return;
+  }
+  const names = [...selectedNames.value];
+  const confirmed = await new Promise<boolean>((resolve) => {
+    Dialog.info({
+      title: "一键发布",
+      description:
+        `将渲染并发布所选 ${names.length} 个知识库下的所有文档：` +
+        "缺少正文的文档会用编辑器渲染补齐 HTML，未发布的文档将转为已发布。确定继续吗？",
+      confirmText: "发布",
+      cancelText: "取消",
+      onConfirm: () => resolve(true),
+      onCancel: () => resolve(false),
+    });
+  });
+  if (!confirmed) {
+    return;
+  }
+  publishing.value = true;
+  let done = 0;
+  let total = 0;
+  try {
+    for (const kbName of names) {
+      const { data } = await axiosInstance.get(
+        `${API_PREFIX}/knowledgebases/${kbName}/docs`,
+        { params: { page: 1, size: 1000 } }
+      );
+      const docs: Array<{ metadata: any; spec: any }> = data.items || [];
+      total += docs.length;
+      for (const doc of docs) {
+        const spec = doc.spec || {};
+        const hadContent = !!(spec.content && String(spec.content).trim());
+        const needPublish = spec.phase !== "published";
+        // 已发布且有正文的文档无需处理，减少不必要的重渲染
+        if (!needPublish && hadContent) {
+          continue;
+        }
+        let content = spec.content || "";
+        if (!hadContent) {
+          try {
+            content = await renderMarkdownToHtml(spec.raw || "");
+          } catch (e) {
+            console.error(`渲染文档 ${doc.metadata?.name} 失败`, e);
+            content = "";
+          }
+        }
+        const payload = { spec: { ...spec, content, phase: "published" } };
+        await axiosInstance.put(
+          `${API_PREFIX}/knowledgebases/${kbName}/docs/${doc.metadata.name}`,
+          payload
+        );
+        done++;
+      }
+    }
+  } finally {
+    publishing.value = false;
+  }
+  clearSelection();
+  await load();
+  await loadStats();
+  if (total === 0) {
+    Toast.success("所选知识库下没有需要发布的文档");
+  } else {
+    Toast.success(`发布完成：已处理 ${done}/${total} 篇文档`);
+  }
+}
+
 // 知识库导入（zip）
 interface ImportPreviewItem {
   displayName: string;
@@ -194,6 +267,21 @@ const importFile = ref<File | null>(null);
 const importPreviewItems = ref<ImportPreviewItem[]>([]);
 const importWarnings = ref<ImportResultItem[]>([]);
 const importOverwrite = ref(true);
+let importResultTimer: ReturnType<typeof setTimeout> | null = null;
+
+function showImportResult(items: ImportResultItem[]) {
+  importWarnings.value = items;
+  if (importResultTimer) {
+    clearTimeout(importResultTimer);
+  }
+  if (!items.length) {
+    return;
+  }
+  importResultTimer = setTimeout(() => {
+    importWarnings.value = [];
+    importResultTimer = null;
+  }, 5000);
+}
 
 function openImportModal() {
   kbImportInput.value?.click();
@@ -244,7 +332,7 @@ async function confirmImport() {
       `${API_PREFIX}/knowledgebases/import`,
       formData
     );
-    importWarnings.value = data as ImportResultItem[];
+    showImportResult(data as ImportResultItem[]);
     importModalVisible.value = false;
     Toast.success("导入完成");
     clearSelection();
@@ -637,6 +725,12 @@ onMounted(() => {
           </span>
           <VSpace>
             <VButton size="sm" type="secondary" @click="clearSelection">取消选择</VButton>
+            <VButton size="sm" type="primary" :loading="publishing" @click="publishSelected">
+              <template #icon>
+                <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+              </template>
+              一键发布
+            </VButton>
             <VButton size="sm" type="secondary" :loading="exporting" @click="exportSelected">
               <template #icon>
                 <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v10"/><polyline points="7 10 12 15 17 10"/><path d="M4 19h16"/></svg>

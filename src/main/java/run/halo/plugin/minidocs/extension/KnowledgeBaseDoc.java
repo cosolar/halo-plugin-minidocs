@@ -61,12 +61,12 @@ public class KnowledgeBaseDoc extends AbstractExtension {
         private Instant updateTime;
 
         @ToString.Exclude
-        @Schema(description = "文档内容（Markdown）")
-        private String content;
+        @Schema(description = "原始文本（Markdown），一般用于给编辑器使用")
+        private String raw;
 
         @ToString.Exclude
-        @Schema(description = "文档内容（服务端渲染后的 HTML，供主题端直接输出）")
-        private String contentHtml;
+        @Schema(description = "最终渲染的文本（HTML），供主题端直接输出")
+        private String content;
 
         @Schema(description = "父文档名称，用于构建文档树，空表示顶级文档")
         private String parentName;

@@ -364,6 +364,18 @@ public class KnowledgeBaseDocService {
     }
 
     /**
+     * 按所属知识库与 slug 查询已发布文档（公开接口使用）。
+     *
+     * <p>额外校验文档归属指定的知识库，避免 slug 在多个知识库中冲突时返回错误文档。
+     */
+    public Mono<KnowledgeBaseDoc> getPublishedDocBySlug(String kbName, String docSlug) {
+        return getPublishedDocBySlug(docSlug)
+            .filter(doc -> Objects.equals(kbName, doc.getSpec().getKnowledgeBaseName()))
+            .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND,
+                "文档不存在: " + docSlug)));
+    }
+
+    /**
      * 导出文档 Markdown，受 allowDocExport 设置约束。
      */
     public Mono<String> exportMarkdown(String kbName, String docName) {
@@ -376,8 +388,8 @@ public class KnowledgeBaseDocService {
                         "文档导出已被管理员禁用"));
                 }
                 return get(kbName, docName)
-                    .map(doc -> doc.getSpec().getContent() == null ? ""
-                        : doc.getSpec().getContent());
+                    .map(doc -> doc.getSpec().getRaw() == null ? ""
+                        : doc.getSpec().getRaw());
             });
     }
 
@@ -442,8 +454,8 @@ public class KnowledgeBaseDocService {
                 entries.add(new ExportEntry(dirName + "/config.json", writeJson(config)));
                 for (var doc : docs) {
                     var slug = resolveSlug(doc);
-                    var content = doc.getSpec().getContent() == null
-                        ? "" : doc.getSpec().getContent();
+                    var content = doc.getSpec().getRaw() == null
+                        ? "" : doc.getSpec().getRaw();
                     entries.add(new ExportEntry(dirName + "/docs/" + slug + ".md",
                         content.getBytes(StandardCharsets.UTF_8)));
                 }
@@ -609,7 +621,8 @@ public class KnowledgeBaseDocService {
         spec.setKnowledgeBaseName(kbName);
         spec.setTitle(nullSafe(d.title()));
         spec.setSlug(d.slug());
-        spec.setPhase(d.phase() == null ? PHASE_DRAFT : d.phase());
+        // 导入的知识库初始统一处于未发布（draft）状态，由前端「一键发布」补齐正文并按需发布
+        spec.setPhase(PHASE_DRAFT);
         spec.setPriority(d.priority());
         spec.setSummary(nullSafe(d.summary()));
         spec.setCover(nullSafe(d.cover()));
@@ -619,11 +632,8 @@ public class KnowledgeBaseDocService {
         if (d.creationTime() != null) {
             spec.setCreationTime(d.creationTime());
         }
-        if (PHASE_PUBLISHED.equals(d.phase()) && d.publishTime() != null) {
-            spec.setPublishTime(d.publishTime());
-        }
         var content = contentBySlug.get(d.slug());
-        spec.setContent(content == null ? ""
+        spec.setRaw(content == null ? ""
             : new String(content, StandardCharsets.UTF_8));
         doc.setSpec(spec);
         return create(kbName, doc, StringUtils.hasText(d.author()) ? d.author() : creator)

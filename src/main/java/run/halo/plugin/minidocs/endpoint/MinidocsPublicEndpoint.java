@@ -44,11 +44,11 @@ public class MinidocsPublicEndpoint implements CustomEndpoint {
     public RouterFunction<ServerResponse> endpoint() {
         return route()
             .GET("/knowledgebases", this::listKnowledgeBases)
-            .GET("/knowledgebases/{name}", this::getKnowledgeBase)
-            .GET("/knowledgebases/{name}/tree", this::getDocTree)
-            .GET("/knowledgebases/{name}/docs", this::listDocs)
-            .GET("/knowledgebases/{name}/docs/{docName}", this::getDoc)
-            .GET("/docs/{slug}", this::getDocBySlug)
+            .GET("/knowledgebases/{kbSlug}", this::getKnowledgeBase)
+            .GET("/knowledgebases/{kbSlug}/tree", this::getDocTree)
+            .GET("/knowledgebases/{kbSlug}/docs", this::listDocs)
+            .GET("/knowledgebases/{kbSlug}/docs/{docSlug}", this::getDoc)
+            .GET("/docs/{docSlug}", this::getDocBySlug)
             .build();
     }
 
@@ -64,60 +64,61 @@ public class MinidocsPublicEndpoint implements CustomEndpoint {
     }
 
     private Mono<ServerResponse> getKnowledgeBase(ServerRequest request) {
-        var name = request.pathVariable("name");
+        var kbSlug = request.pathVariable("kbSlug");
         return enforcePublicRead()
-            .then(getPublicKnowledgeBase(name)
+            .then(getPublicKnowledgeBase(kbSlug)
                 .flatMap(kb -> ServerResponse.ok().bodyValue(kb)));
     }
 
     private Mono<ServerResponse> getDocTree(ServerRequest request) {
-        var kbName = request.pathVariable("name");
+        var kbSlug = request.pathVariable("kbSlug");
         return enforcePublicRead()
-            .then(getPublicKnowledgeBase(kbName)
-                .flatMap(kb -> docService.buildTree(kbName, KnowledgeBaseDocService.PHASE_PUBLISHED))
+            .then(getPublicKnowledgeBase(kbSlug)
+                .flatMap(kb -> docService.buildTree(kb.getMetadata().getName(),
+                        KnowledgeBaseDocService.PHASE_PUBLISHED))
                 .flatMap(tree -> ServerResponse.ok().bodyValue(tree)));
     }
 
     private Mono<ServerResponse> listDocs(ServerRequest request) {
-        var kbName = request.pathVariable("name");
+        var kbSlug = request.pathVariable("kbSlug");
         return enforcePublicRead()
-            .then(getPublicKnowledgeBase(kbName)
+            .then(getPublicKnowledgeBase(kbSlug)
                 .flatMap(kb -> {
                     var keyword = request.queryParam("keyword").orElse(null);
                     var page = request.queryParam("page").map(Integer::parseInt).orElse(1);
                     var size = request.queryParam("size").map(Integer::parseInt).orElse(20);
-                    return docService.list(kbName, keyword,
+                    return docService.list(kb.getMetadata().getName(), keyword,
                             KnowledgeBaseDocService.PHASE_PUBLISHED, page, size)
                         .flatMap(result -> ServerResponse.ok().bodyValue(result));
                 }));
     }
 
     private Mono<ServerResponse> getDoc(ServerRequest request) {
-        var kbName = request.pathVariable("name");
-        var docName = request.pathVariable("docName");
+        var kbSlug = request.pathVariable("kbSlug");
+        var docSlug = request.pathVariable("docSlug");
         return enforcePublicRead()
-            .then(getPublicKnowledgeBase(kbName)
-                .flatMap(kb -> docService.getPublishedDoc(kbName, docName))
+            .then(getPublicKnowledgeBase(kbSlug)
+                .flatMap(kb -> docService.getPublishedDocBySlug(kb.getMetadata().getName(), docSlug))
                 .flatMap(doc -> ServerResponse.ok().bodyValue(doc)));
     }
 
     private Mono<ServerResponse> getDocBySlug(ServerRequest request) {
-        var slug = request.pathVariable("slug");
+        var docSlug = request.pathVariable("docSlug");
         return enforcePublicRead()
-            .then(docService.getPublishedDocBySlug(slug)
+            .then(docService.getPublishedDocBySlug(docSlug)
                 .flatMap(doc -> getPublicKnowledgeBase(doc.getSpec().getKnowledgeBaseName())
                     .thenReturn(doc))
                 .flatMap(doc -> ServerResponse.ok().bodyValue(doc)));
     }
 
     /**
-     * 获取公开知识库（不存在或非公开时返回 404）。
+     * 获取公开知识库（按 slug 或 metadata.name 解析，不存在或非公开时返回 404）。
      */
-    private Mono<KnowledgeBase> getPublicKnowledgeBase(String name) {
-        return knowledgeBaseService.get(name)
+    private Mono<KnowledgeBase> getPublicKnowledgeBase(String kbSlug) {
+        return knowledgeBaseService.getBySlugOrName(kbSlug)
             .filter(kb -> Boolean.TRUE.equals(kb.getSpec().getPublicVisible()))
             .switchIfEmpty(Mono.error(
-                new ResponseStatusException(HttpStatus.NOT_FOUND, "知识库不存在: " + name)));
+                new ResponseStatusException(HttpStatus.NOT_FOUND, "知识库不存在: " + kbSlug)));
     }
 
     /**

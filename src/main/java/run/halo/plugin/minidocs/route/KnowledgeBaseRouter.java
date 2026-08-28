@@ -43,9 +43,17 @@ public class KnowledgeBaseRouter {
     RouterFunction<ServerResponse> knowledgeBaseShareRoute() {
         return route(GET("/docs/share/{kbSlug}"), shareHandler("doc_share"))
             .andRoute(GET("/docs/view/{kbSlug}"), shareHandler("doc"))
-            .andRoute(GET("/docs"), req -> templateNameResolver
-                .resolveTemplateNameOrDefault(req.exchange(), "docs")
-                .flatMap(t -> ServerResponse.ok().render(t)));
+            .andRoute(GET("/docs"), req -> req.principal()
+                .map(java.security.Principal::getName)
+                .map(n -> "anonymousUser".equals(n) ? "" : n)
+                .defaultIfEmpty("")
+                .flatMap(loginUser -> templateNameResolver
+                    .resolveTemplateNameOrDefault(req.exchange(), "docs")
+                    .flatMap(t -> {
+                        var model = new HashMap<String, Object>();
+                        model.put("loginUser", loginUser);
+                        return ServerResponse.ok().render(t, model);
+                    })));
     }
 
     private HandlerFunction<ServerResponse> shareHandler(String template) {
@@ -54,25 +62,30 @@ public class KnowledgeBaseRouter {
             var docSlug = request.queryParam("docSlug")
                 .filter(s -> !s.isBlank()).orElse(null);
 
-            // 服务端仅做公开性校验，不把业务数据塞入 model；
-            // 真正的知识库/文档树/文档数据由模板通过 minidocsFinder 自行查询。
-            return knowledgeBaseService.getBySlugOrName(kbSlug)
-                .flatMap(kb -> {
-                    if (!Boolean.TRUE.equals(kb.getSpec().getPublicVisible())) {
-                        return Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND,
-                            "知识库不存在或未公开: " + kbSlug));
-                    }
-                    return templateNameResolver
-                        .resolveTemplateNameOrDefault(request.exchange(), template)
-                        .flatMap(t -> {
-                            var model = new HashMap<String, Object>();
-                            model.put("kbSlug", kbSlug);
-                            if (docSlug != null) {
-                                model.put("docSlug", docSlug);
-                            }
-                            return ServerResponse.ok().render(t, model);
-                        });
-                })
+            // 服务端仅做公开性校验；业务数据由模板通过 minidocsFinder 自取。
+            // 当前登录人（登录时为用户名，未登录为空）用于顶部导航展示。
+            return request.principal()
+                .map(java.security.Principal::getName)
+                .map(n -> "anonymousUser".equals(n) ? "" : n)
+                .defaultIfEmpty("")
+                .flatMap(loginUser -> knowledgeBaseService.getBySlugOrName(kbSlug)
+                    .flatMap(kb -> {
+                        if (!Boolean.TRUE.equals(kb.getSpec().getPublicVisible())) {
+                            return Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND,
+                                "知识库不存在或未公开: " + kbSlug));
+                        }
+                        return templateNameResolver
+                            .resolveTemplateNameOrDefault(request.exchange(), template)
+                            .flatMap(t -> {
+                                var model = new HashMap<String, Object>();
+                                model.put("kbSlug", kbSlug);
+                                if (docSlug != null) {
+                                    model.put("docSlug", docSlug);
+                                }
+                                model.put("loginUser", loginUser);
+                                return ServerResponse.ok().render(t, model);
+                            });
+                    }))
                 .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND,
                     "知识库不存在或未公开: " + kbSlug)));
         };

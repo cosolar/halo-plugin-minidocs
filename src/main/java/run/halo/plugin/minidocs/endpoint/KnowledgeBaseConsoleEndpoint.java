@@ -9,18 +9,22 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.buffer.DataBufferUtils;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.codec.multipart.FilePart;
 import org.springframework.http.codec.multipart.FormFieldPart;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.reactive.function.server.RouterFunction;
 import org.springframework.web.reactive.function.server.ServerRequest;
 import org.springframework.web.reactive.function.server.ServerResponse;
 import reactor.core.publisher.Mono;
 import run.halo.app.core.extension.endpoint.CustomEndpoint;
 import run.halo.app.extension.GroupVersion;
+import run.halo.app.plugin.ReactiveSettingFetcher;
 import run.halo.plugin.minidocs.extension.KnowledgeBase;
+import run.halo.plugin.minidocs.setting.BasicSetting;
 import run.halo.plugin.minidocs.service.KnowledgeBaseDocService;
 import run.halo.plugin.minidocs.service.KnowledgeBaseService;
 
@@ -42,6 +46,7 @@ public class KnowledgeBaseConsoleEndpoint implements CustomEndpoint {
 
     private final KnowledgeBaseService knowledgeBaseService;
     private final KnowledgeBaseDocService docService;
+    private final ReactiveSettingFetcher settingFetcher;
 
     @Override
     public RouterFunction<ServerResponse> endpoint() {
@@ -108,23 +113,32 @@ public class KnowledgeBaseConsoleEndpoint implements CustomEndpoint {
     }
 
     private Mono<ServerResponse> exportKnowledgeBases(ServerRequest request) {
-        return request.bodyToMono(Map.class)
-            .map(body -> {
-                Object namesObj = body == null ? null : body.get("names");
-                if (namesObj instanceof List<?> list) {
-                    return list.stream()
-                        .filter(String.class::isInstance)
-                        .map(String.class::cast)
-                        .toList();
+        return settingFetcher.fetch("basic", BasicSetting.class)
+            .map(BasicSetting::docExportEnabled)
+            .defaultIfEmpty(true)
+            .flatMap(enabled -> {
+                if (!enabled) {
+                    return Mono.error(new ResponseStatusException(HttpStatus.FORBIDDEN,
+                        "知识库导出已被管理员禁用"));
                 }
-                return List.<String>of();
-            })
-            .flatMap(docService::exportZip)
-            .flatMap(bytes -> ServerResponse.ok()
-                .contentType(MediaType.APPLICATION_OCTET_STREAM)
-                .header(HttpHeaders.CONTENT_DISPOSITION,
-                    "attachment; filename=\"minidocs" + exportTimestamp() + ".zip\"")
-                .bodyValue(new ByteArrayResource(bytes)));
+                return request.bodyToMono(Map.class)
+                    .map(body -> {
+                        Object namesObj = body == null ? null : body.get("names");
+                        if (namesObj instanceof List<?> list) {
+                            return list.stream()
+                                .filter(String.class::isInstance)
+                                .map(String.class::cast)
+                                .toList();
+                        }
+                        return List.<String>of();
+                    })
+                    .flatMap(docService::exportZip)
+                    .flatMap(bytes -> ServerResponse.ok()
+                        .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                        .header(HttpHeaders.CONTENT_DISPOSITION,
+                            "attachment; filename=\"minidocs" + exportTimestamp() + ".zip\"")
+                        .bodyValue(new ByteArrayResource(bytes)));
+            });
     }
 
     private static String exportTimestamp() {

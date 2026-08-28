@@ -1,6 +1,7 @@
 package run.halo.plugin.minidocs.service;
 
 import java.time.Instant;
+import java.time.Duration;
 import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
 import java.util.concurrent.ThreadLocalRandom;
@@ -13,6 +14,7 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Mono;
 import reactor.util.retry.Retry;
+import run.halo.app.extension.AbstractExtension;
 import run.halo.app.extension.ListOptions;
 import run.halo.app.extension.ListResult;
 import run.halo.app.extension.PageRequestImpl;
@@ -296,6 +298,10 @@ public class KnowledgeBaseService {
 
     /**
      * 删除知识库并级联删除其下所有文档。
+     *
+     * <p>Halo 扩展删除为异步最终一致：删除请求返回后索引尚未同步，立即查询可能仍读到
+     * 旧数据。因此删除每个文档/知识库后都轮询其从索引移除（awaitIndexRemoved），
+     * 接口返回时删除已同步生效；超时兜底不阻塞主流程。
      */
     public Mono<Void> delete(String name) {
         return get(name)
@@ -304,8 +310,35 @@ public class KnowledgeBaseService {
                         .fieldQuery(equal("spec.knowledgeBaseName", name))
                         .build(),
                     Sort.unsorted())
-                .flatMap(doc -> client.delete(doc))
-                .then(client.delete(kb).then()));
+                .concatMap(doc -> client.delete(doc)
+                    .then(awaitIndexRemoved(KnowledgeBaseDoc.class,
+                        doc.getMetadata().getName())))
+                .then(deleteKbRetryable(name)))
+            .then(awaitIndexRemoved(KnowledgeBase.class, name));
+    }
+
+    /**
+     * 删除知识库本体。级联删除文档会触发 Reconciler 异步刷新知识库统计（docCount 等），
+     * 从而并发递增知识库的 metadata.version；若用删除前抓取的旧实例 delete 会因版本不匹配
+     * 抛 409 conflict。因此删除前总是重新抓取最新版本，并对瞬时版本冲突重试。
+     */
+    private Mono<Void> deleteKbRetryable(String name) {
+        return Mono.defer(() -> client.fetch(KnowledgeBase.class, name)
+                .flatMap(kb -> client.delete(kb).then()))
+            .retryWhen(Retry.max(3));
+    }
+
+    /**
+     * 轮询等待扩展从索引移除。删除自身是瞬时的，索引同步经异步 store-watcher 完成：
+     * 删除返回后立即查询仍可能读到旧数据，此方法轮询直到资源不再出现（带超时兜底）。
+     */
+    private <E extends AbstractExtension> Mono<Void> awaitIndexRemoved(Class<E> type,
+        String name) {
+        return Mono.defer(() -> client.fetch(type, name)
+                .flatMap(res -> Mono.delay(Duration.ofMillis(120))
+                    .then(awaitIndexRemoved(type, name))))
+            .timeout(Duration.ofSeconds(5))
+            .onErrorResume(e -> Mono.empty());
     }
 
     /**

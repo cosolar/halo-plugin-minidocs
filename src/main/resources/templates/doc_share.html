@@ -94,7 +94,7 @@
       <main class="md-article">
         <div th:if="${doc}" id="md-article-body">
           <h1 th:text="${doc.spec.title}"></h1>
-          <div class="content" th:utext="${doc.spec.contentHtml}"></div>
+          <div class="content" th:utext="${doc.spec.content}"></div>
         </div>
         <div th:unless="${doc}" class="md-empty">该知识库暂无已发布文档。</div>
       </main>
