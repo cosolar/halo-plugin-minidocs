@@ -390,6 +390,50 @@ public class KnowledgeBaseDocService {
     }
 
     /**
+     * 按名称或 slug 获取知识库内文档（含草稿等任意阶段）。
+     * <p>供已通过资源级权限校验的登录用户读取其有权限访问的（私有）知识库文档：
+     * 先按 {@code metadata.name} 精确命中并校验归属，未命中再退回按 {@code spec.slug}
+     * 在该知识库内查询；两者均无则返回 404。</p>
+     */
+    public Mono<KnowledgeBaseDoc> getByNameOrSlug(String kbName, String key) {
+        return client.fetch(KnowledgeBaseDoc.class, key)
+            .filter(doc -> Objects.equals(kbName, doc.getSpec().getKnowledgeBaseName()))
+            .switchIfEmpty(findInKbBySlug(kbName, key));
+    }
+
+    private Mono<KnowledgeBaseDoc> findInKbBySlug(String kbName, String slug) {
+        return client.listBy(KnowledgeBaseDoc.class,
+                ListOptions.builder().fieldQuery(and(
+                    equal("spec.slug", slug),
+                    equal("spec.knowledgeBaseName", kbName))).build(),
+                PageRequestImpl.of(1, 1))
+            .flatMap(result -> result.getItems().stream().findFirst()
+                .map(Mono::just)
+                .orElseGet(() -> Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND,
+                    "文档不存在: " + slug))));
+    }
+
+    /**
+     * 全局按名称或 slug 获取文档（含草稿等任意阶段），供「已登录且有权限」的全局读取接口使用。
+     * <p>先按 {@code metadata.name} 精确定位，未命中再退回按 {@code spec.slug} 全局查询；
+     * 文档所属知识库的可见性由调用方另行校验。</p>
+     */
+    public Mono<KnowledgeBaseDoc> getByNameOrSlugGlobal(String key) {
+        return client.fetch(KnowledgeBaseDoc.class, key)
+            .switchIfEmpty(findGlobalBySlug(key));
+    }
+
+    private Mono<KnowledgeBaseDoc> findGlobalBySlug(String slug) {
+        return client.listBy(KnowledgeBaseDoc.class,
+                ListOptions.builder().fieldQuery(equal("spec.slug", slug)).build(),
+                PageRequestImpl.of(1, 1))
+            .flatMap(result -> result.getItems().stream().findFirst()
+                .map(Mono::just)
+                .orElseGet(() -> Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND,
+                    "文档不存在: " + slug))));
+    }
+
+    /**
      * 导出文档 Markdown，受 allowDocExport 设置约束。
      */
     public Mono<String> exportMarkdown(String kbName, String docName) {

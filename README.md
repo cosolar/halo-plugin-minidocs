@@ -88,7 +88,7 @@ MiniDocs 的权限模型分为两层，叠加生效：**Halo 角色模板**决�
 | 入口 | 可见内容 | 说明 |
 | --- | --- | --- |
 | Console 管理端（`console.api.minidocs.halo.run`） | 当前用户可访问的知识库（公开 + 自己创建 / 是成员的私有 + 管理可见全部） | 所有端点经 `requireAccessByName()` 统一校验，无权限返回 403；创建 / 更新 / 删除 / 发布 / 导入 / 导出等操作均需先通过校验 |
-| 公共 REST API（`api.minidocs.halo.run`） | 仅公开知识库及其已发布文档 | 匿名访问受「匿名阅读开关」约束；私有知识库一律不出现 |
+| 公共 REST API（`api.minidocs.halo.run`） | 详情 / 列表 / 文档树 / 文档列表 / 单篇与全局文档读取：未登录仅公开已发布；**已登录且有权限**时可访问私有库内容（含草稿） | 匿名访问受「匿名阅读开关」约束；对无权限的私有库一律返回 404 |
 | 主题 Finder（`minidocsFinder`） | 按当前访问者返回：登录用户 = 公开 + 自己创建 / 是成员的私有库；未登录 = 仅公开库 | 与公共 API 一致的可见性边界；文档仅返回已发布 |
 | 列表 / 分页 | `listAccessible` 先做资源级过滤，再排序、分页 | 分页 `total` 为「过滤后的全量」，避免分页数据失真 |
 | 统计面板（stats） | 仅统计当前用户可访问的资源 | 不向普通用户泄露全站私有知识库 / 文档的聚合数量 |
@@ -96,7 +96,8 @@ MiniDocs 的权限模型分为两层，叠加生效：**Halo 角色模板**决�
 ### 文档级可见性
 
 - 文档有 `draft`（草稿）与 `published`（发布）两种状态（历史数据中的 `archived` 兼容显示为「已归档」）。
-- **对外（公共 API、Finder、主题阅读页）只暴露 `published` 的文档**；草稿不会出现在文档树与阅读页中，仅知识库的创建者 / 成员 / 管理者可在 Console 中查看与编辑。
+- **对外（公共 API 的列表 / 文档树 / 全局读取、Finder、主题阅读页）只暴露 `published` 的文档**；草稿不会出现在文档树与阅读页中，仅知识库的创建者 / 成员 / 管理者可在 Console 中查看与编辑。
+- 例外：公共 API 的**读取端点（详情 / 文档树 / 文档列表 / 单篇与全局文档读取）**在**已登录且对该库有权限**时，可读取私有库的草稿文档（文档标识支持 `metadata.name` 与 `spec.slug`）；未登录或无权访问时这些端点仅返回「公开知识库 + 已发布文档」。详见 [REST API 文档](./docs/minidocs-rest-api.md) 的「可见性语义」。
 
 ### 导出控制
 
@@ -131,7 +132,7 @@ MiniDocs 支持为知识库开启「外链分享」，把知识库内容通过�
 
 - **Finder API** `minidocsFinder`：支持 `listKnowledgeBases(page, size)`、`getKnowledgeBase(kbSlug)`、`listDocs(kbSlug, page, size)`、`getDoc(kbSlug, docSlug)`、`getDocTree(kbSlug)` 和 `getDocBySlug(docSlug)`，用于在 Thymeleaf / FreeMarker 模板中渲染知识库与文档。
 - **公共 REST API**：提供匿名知识库 / 文档查询接口（含文档树、按 slug 获取），可用于前端框架、小程序或服务端集成。
-- **数据可见性**：公开 API 仅返回 `publicVisible=true` 的知识库及其 `phase=published` 文档；Finder 则按**当前访问者**返回其可访问内容——未登录仅公开库，登录用户额外包含自己创建 / 是成员的私有库；所有文档仅 `phase=published`。匿名访问受插件「允许未登录用户阅读」设置约束。
+- **数据可见性**：公开 API 的详情 / 列表 / 文档树 / 文档列表 / 单篇与全局文档读取——未登录仅返回 `publicVisible=true` 的知识库及其 `phase=published` 文档；**已登录且有权限**时可额外访问私有库内容（含草稿，文档标识兼容 `metadata.name` 与 `spec.slug`）。Finder 则按**当前访问者**返回其可访问内容——未登录仅公开库，登录用户额外包含自己创建 / 是成员的私有库；Finder 中所有文档仅 `phase=published`。匿名访问受插件「允许未登录用户阅读」设置约束。
 
 详细文档请参考：
 

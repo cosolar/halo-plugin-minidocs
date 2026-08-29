@@ -8,26 +8,28 @@
 - Console API：`console.api.minidocs.halo.run/v1alpha1`
 - 标准 CRUD：`minidocs.halo.run/v1alpha1`
 
-## 公共 API（匿名可访问）
+## 公共 API
 
-此插件提供了一组位于 `api.minidocs.halo.run/v1alpha1` 的公共 JSON API，用于查询公开知识库及其已发布文档、统计点赞、以及访问外链分享内容，可供主题前端、小程序或服务端集成。
+此插件提供了一组位于 `api.minidocs.halo.run/v1alpha1` 的公共 JSON API，用于查询知识库及其文档、统计点赞、以及访问外链分享内容，可供主题前端、小程序或服务端集成。
+
+本组 API 的可见性规则与 Console 管理端 / Finder 保持一致：**私有知识库仅「创建者、`spec.members` 成员、具备知识库管理权限的用户」在登录后可访问**；其余请求一律返回 `404`（不泄露私有库是否存在），未登录访问公开库还受「匿名阅读开关」约束。
 
 ### 端点列表
 
 | 端点 | 方法 | 说明 |
 | --- | --- | --- |
-| `/apis/api.minidocs.halo.run/v1alpha1/knowledgebases` | `GET` | 分页列出公开知识库；支持 `keyword`、`page`、`size` 查询参数 |
-| `/apis/api.minidocs.halo.run/v1alpha1/knowledgebases/{kbSlug}` | `GET` | 获取单个公开知识库详情；非公开知识库返回 `404` |
-| `/apis/api.minidocs.halo.run/v1alpha1/knowledgebases/{kbSlug}/tree` | `GET` | 获取该知识库已发布文档的文档树（递归嵌套） |
-| `/apis/api.minidocs.halo.run/v1alpha1/knowledgebases/{kbSlug}/docs` | `GET` | 分页列出该知识库已发布文档；支持 `keyword`、`page`、`size` |
-| `/apis/api.minidocs.halo.run/v1alpha1/knowledgebases/{kbSlug}/docs/{docSlug}` | `GET` | 获取单篇已发布文档（按文档 `spec.slug` 取，并校验归属该知识库） |
-| `/apis/api.minidocs.halo.run/v1alpha1/docs/{docSlug}` | `GET` | 按 `docSlug` 直接获取已发布文档（所属知识库须公开） |
+| `/apis/api.minidocs.halo.run/v1alpha1/knowledgebases` | `GET` | 分页列出知识库：未登录仅公开库，已登录额外包含自己有权限访问的私有库（创建者/成员/管理）；支持 `keyword`、`page`、`size` |
+| `/apis/api.minidocs.halo.run/v1alpha1/knowledgebases/{kbSlug}` | `GET` | 获取单个知识库详情：公开库，或已登录且有权限的私有库；无权返回 `404` |
+| `/apis/api.minidocs.halo.run/v1alpha1/knowledgebases/{kbSlug}/tree` | `GET` | 获取知识库文档树：公开库仅已发布；已登录且有权限的私有库含草稿（递归嵌套） |
+| `/apis/api.minidocs.halo.run/v1alpha1/knowledgebases/{kbSlug}/docs` | `GET` | 分页列出文档：公开库仅已发布；已登录且有权限的私有库含草稿；支持 `keyword`、`page`、`size` |
+| `/apis/api.minidocs.halo.run/v1alpha1/knowledgebases/{kbSlug}/docs/{docSlug}` | `GET` | 获取单篇文档（详见下文「单篇文档读取的权限语义」） |
+| `/apis/api.minidocs.halo.run/v1alpha1/docs/{docSlug}` | `GET` | 全局按 `docSlug`（或 `metadata.name`）获取文档（公开库已发布，或已登录且有权限的私有库任意阶段） |
 | `/apis/api.minidocs.halo.run/v1alpha1/knowledgebases/{kbSlug}/stats` | `GET` | 获取知识库访问量 / 点赞统计（公开库，或当前用户可访问的私有库） |
 | `/apis/api.minidocs.halo.run/v1alpha1/knowledgebases/{kbSlug}/like` | `POST` | 知识库点赞（一次性幂等，匿名也可点赞） |
 | `/apis/api.minidocs.halo.run/v1alpha1/share/{shareToken}/stats` | `GET` | 分享外链的访问量 / 点赞统计（仅需有效外链，不要求公开或登录） |
 | `/apis/api.minidocs.halo.run/v1alpha1/share/{shareToken}/like` | `POST` | 分享外链点赞（一次性幂等，无需登录） |
 
-> 路径约定：公共 API 统一使用 **slug 字段**（URL 友好标识）查询——**知识库标识用 `{kbSlug}`**、**文档标识用 `{docSlug}`**，分别对应资源的 `spec.slug`。`{kbSlug}` 兼容 `metadata.name` 或 `spec.slug`（经 `getBySlugOrName` 解析）；`{docSlug}` 严格按 `spec.slug` 定位，并额外校验文档归属指定的知识库。`{shareToken}` 为知识库的外链分享标识（`spec.shareToken`，开启分享时由系统生成的 12 位随机串）。
+> 路径约定：知识库标识 `{kbSlug}` 兼容 `metadata.name` 或 `spec.slug`（经 `getBySlugOrName` 解析）；文档标识 `{docSlug}` 通常按 `spec.slug` 定位——**当已登录用户对知识库有访问权限时，文档标识同样兼容 `metadata.name`**（单篇与全局文档读取端点均适用）。`{shareToken}` 为知识库的外链分享标识（`spec.shareToken`，开启分享时由系统生成的 12 位随机串）。
 
 ### 统计与点赞
 
@@ -55,7 +57,7 @@ curl -X POST "https://your-halo-site/apis/api.minidocs.halo.run/v1alpha1/knowled
 
 ### 匿名访问说明
 
-公共 API 仅暴露 `publicVisible=true` 的知识库及其 `phase=published` 的文档（分享链路除外，见上文）。是否允许匿名读取由插件基础设置项 `allowAnonymousRead`（`settings.yaml` 中 `basic.allowAnonymousRead`）控制，由 `BasicSetting.anonymousReadEnabled()` 方法判断（字段为 `null` 时兜底为开启）：
+公共 API 对**未登录访客**仅暴露 `publicVisible=true` 的知识库及其 `phase=published` 的文档（分享链路除外，见上文）；已登录用户按其资源权限还可访问自己有权限的私有库（见下文「可见性语义」）。是否允许匿名读取由插件基础设置项 `allowAnonymousRead`（`settings.yaml` 中 `basic.allowAnonymousRead`）控制，由 `BasicSetting.anonymousReadEnabled()` 方法判断（字段为 `null` 时兜底为开启）：
 
 - 设置为 `true`（或字段缺失为空）时，匿名用户可直接访问上述查询接口。
 - 设置为 `false` 时，未登录访问查询接口会被服务层二次校验拦截并返回 `403`，已登录用户仍可正常访问。
@@ -65,6 +67,33 @@ curl -X POST "https://your-halo-site/apis/api.minidocs.halo.run/v1alpha1/knowled
 > 匿名角色已聚合授予 `stats` / `like` / `share` 子资源权限（见下文角色说明），因此匿名访客在阅读页与分享页可正常完成统计查询与点赞交互；数据可见范围仍受各端点的业务校验（公开 / 成员 / 分享校验）约束。
 
 因此主题在调用公共 API 时应处理 `403`：引导用户登录，或提示站点管理员开启匿名阅读。查询接口只授予读取权限；点赞端点为受控写操作（幂等、每用户一次），不提供创建、修改或删除知识库 / 文档的匿名能力。
+
+### 可见性语义
+
+本组公共 API 的详情 / 文档树 / 文档列表 / 单篇文档 / 全局文档读取端点统一遵循以下规则，与 Console 管理端、Finder 保持一致：
+
+| 访问者 | 知识库 | 文档阶段 | 详情 / 树 / 列表 / 文档 |
+| --- | --- | --- | --- |
+| 未登录 | 公开库 | 仅 `published` | 均可访问；受「匿名阅读开关」约束（关闭时返回 `403`） |
+| 未登录 | 私有库 | 任意 | 一律返回 `404`（不泄露私有库是否存在） |
+| 已登录且有权限（创建者 / `spec.members` 成员 / 知识库管理者） | 私有库 | `draft` + `published` | 均可访问，**含草稿**；文档标识兼容 `metadata.name` 与 `spec.slug` |
+| 已登录但对该库无权限 | 私有库 | 任意 | 一律返回 `404` |
+| 已登录 | 公开库 | 仅 `published` | 同未登录，草稿不对外 |
+
+要点：
+
+- **知识库列表** `GET /knowledgebases`：未登录仅列出公开库；已登录额外列出当前用户**可访问**的私有库（创建者 / 成员 / 管理）。
+- **单篇文档** `GET /knowledgebases/{kbSlug}/docs/{docSlug}`：已登录且有权限时，文档标识（`{docSlug}`）兼容 `metadata.name` 或 `spec.slug`。
+- **全局文档** `GET /docs/{docSlug}`：先按 `metadata.name`（或 `spec.slug`）解析文档，再校验其所属知识库的可见性（公开库，或当前登录用户有权限的私有库）。
+- 分享链路端点（`share/{shareToken}/stats`、`like`）**不**受上述规则约束，详见上文「分享外链 API」。
+
+```bash
+# 未登录 / 无权限：读取私有库文档 → 404
+curl "https://your-halo-site/apis/api.minidocs.halo.run/v1alpha1/knowledgebases/kb-private/docs/anonymous"
+
+# 已登录且有权限：按 name 读取私有库草稿文档
+curl -b "session-cookie" "https://your-halo-site/apis/api.minidocs.halo.run/v1alpha1/knowledgebases/KB20260828161535738577/docs/DOC20260827104410b83e0f"
+```
 
 ### 分页与排序说明
 

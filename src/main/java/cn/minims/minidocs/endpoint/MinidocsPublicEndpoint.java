@@ -16,6 +16,7 @@ import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Mono;
 import run.halo.app.core.extension.endpoint.CustomEndpoint;
 import run.halo.app.extension.GroupVersion;
+import run.halo.app.extension.ListResult;
 import run.halo.app.plugin.ReactiveSettingFetcher;
 import cn.minims.minidocs.extension.KnowledgeBase;
 import cn.minims.minidocs.extension.KnowledgeBaseDoc;
@@ -27,11 +28,13 @@ import cn.minims.minidocs.setting.BasicSetting;
 import static org.springframework.web.reactive.function.server.RouterFunctions.route;
 
 /**
- * 知识库公开只读端点（供主题/第三方消费）。
+ * 知识库公开端点（供主题/第三方消费）。
  *
  * <p>前缀：/apis/api.minidocs.halo.run/v1alpha1
- * <p>仅暴露 publicVisible=true 的知识库及其已发布文档；未登录访问受
- * allowAnonymousRead 设置约束（RBAC 匿名聚合 + 服务层二次校验）。
+ * <p>可见性规则（与 Console / Finder 保持一致）：私有知识库仅「创建者、
+ * spec.members 成员、知识库拥有管理权限者」可访问，其余一律 404。
+ * 未登录访问公开库还受 allowAnonymousRead 设置约束（RBAC 匿名聚合 + 服务层二次校验）。
+ * 已登录且有权限的用户可读取私有库内容（含草稿）；公开库对所有人仅暴露已发布文档。
  *
  * @author Cosolar
  */
@@ -65,57 +68,105 @@ public class MinidocsPublicEndpoint implements CustomEndpoint {
                 var keyword = request.queryParam("keyword").orElse(null);
                 var page = request.queryParam("page").map(Integer::parseInt).orElse(1);
                 var size = request.queryParam("size").map(Integer::parseInt).orElse(20);
-                return knowledgeBaseService.listPublic(keyword, page, size)
-                    .flatMap(result -> ServerResponse.ok().bodyValue(result));
+                // 未登录：仅公开库；已登录：额外包含自己有权限访问的私有库（创建者/成员/管理）
+                return knowledgeBaseService.currentUsername()
+                    .flatMap(username -> {
+                        Mono<ListResult<KnowledgeBase>> result = StringUtils.hasText(username)
+                            ? knowledgeBaseService.listAccessible(keyword, null, "updateTime",
+                                page, size)
+                            : knowledgeBaseService.listPublic(keyword, page, size);
+                        return result.flatMap(r -> ServerResponse.ok().bodyValue(r));
+                    });
             }));
     }
 
     private Mono<ServerResponse> getKnowledgeBase(ServerRequest request) {
-        var kbSlug = request.pathVariable("kbSlug");
+        var kbKey = request.pathVariable("kbSlug");
         return enforcePublicRead()
-            .then(getPublicKnowledgeBase(kbSlug)
+            .then(resolveAccessible(kbKey)
                 .flatMap(kb -> ServerResponse.ok().bodyValue(kb)));
     }
 
     private Mono<ServerResponse> getDocTree(ServerRequest request) {
-        var kbSlug = request.pathVariable("kbSlug");
+        var kbKey = request.pathVariable("kbSlug");
         return enforcePublicRead()
-            .then(getPublicKnowledgeBase(kbSlug)
-                .flatMap(kb -> docService.buildTree(kb.getMetadata().getName(),
-                        KnowledgeBaseDocService.PHASE_PUBLISHED))
+            .then(resolveAccessible(kbKey)
+                .flatMap(kb -> docService.buildTree(kb.getMetadata().getName(), docPhaseFor(kb)))
                 .flatMap(tree -> ServerResponse.ok().bodyValue(tree)));
     }
 
     private Mono<ServerResponse> listDocs(ServerRequest request) {
-        var kbSlug = request.pathVariable("kbSlug");
+        var kbKey = request.pathVariable("kbSlug");
         return enforcePublicRead()
-            .then(getPublicKnowledgeBase(kbSlug)
+            .then(resolveAccessible(kbKey)
                 .flatMap(kb -> {
                     var keyword = request.queryParam("keyword").orElse(null);
                     var page = request.queryParam("page").map(Integer::parseInt).orElse(1);
                     var size = request.queryParam("size").map(Integer::parseInt).orElse(20);
-                    return docService.list(kb.getMetadata().getName(), keyword,
-                            KnowledgeBaseDocService.PHASE_PUBLISHED, page, size)
+                    return docService.list(kb.getMetadata().getName(), keyword, docPhaseFor(kb),
+                            page, size)
                         .flatMap(result -> ServerResponse.ok().bodyValue(result));
                 }));
     }
 
     private Mono<ServerResponse> getDoc(ServerRequest request) {
-        var kbSlug = request.pathVariable("kbSlug");
-        var docSlug = request.pathVariable("docSlug");
+        var kbKey = request.pathVariable("kbSlug");
+        var docKey = request.pathVariable("docSlug");
         return enforcePublicRead()
-            .then(getPublicKnowledgeBase(kbSlug)
-                .flatMap(kb -> docService.getPublishedDocBySlug(kb.getMetadata().getName(), docSlug))
-                .flatMap(doc -> ServerResponse.ok().bodyValue(doc)));
+            .then(resolveAccessible(kbKey))
+            .flatMap(kb -> {
+                var kbName = kb.getMetadata().getName();
+                // 已通过资源级权限校验：私有库仅创建者/成员/管理可见，可读取草稿与已发布，
+                // 文档标识支持 metadata.name 或 spec.slug；公开库对所有人仅暴露已发布文档。
+                Mono<KnowledgeBaseDoc> doc = Boolean.TRUE.equals(kb.getSpec().getPublicVisible())
+                    ? docService.getPublishedDocBySlug(kbName, docKey)
+                    : docService.getByNameOrSlug(kbName, docKey);
+                return doc.flatMap(d -> ServerResponse.ok().bodyValue(d));
+            });
     }
 
     private Mono<ServerResponse> getDocBySlug(ServerRequest request) {
-        var docSlug = request.pathVariable("docSlug");
+        var docKey = request.pathVariable("docSlug");
         return enforcePublicRead()
-            .then(docService.getPublishedDocBySlug(docSlug)
-                .flatMap(doc -> getPublicKnowledgeBase(doc.getSpec().getKnowledgeBaseName())
-                    .thenReturn(doc))
+            .then(findAccessibleDocGlobal(docKey)
                 .flatMap(doc -> ServerResponse.ok().bodyValue(doc)));
+    }
+
+    /**
+     * 该知识库对外暴露的文档阶段：公开库仅已发布；私有库（已通过权限校验）含草稿。
+     */
+    private String docPhaseFor(KnowledgeBase kb) {
+        return Boolean.TRUE.equals(kb.getSpec().getPublicVisible())
+            ? KnowledgeBaseDocService.PHASE_PUBLISHED : null;
+    }
+
+    /**
+     * 全局按 name 或 slug 解析一篇当前用户可访问的文档。
+     * <p>文档所属知识库须为公开库，或当前登录用户对它有权限（创建者/成员/管理）；
+     * 否则返回 404，避免越权读取私有库内容。
+     */
+    private Mono<KnowledgeBaseDoc> findAccessibleDocGlobal(String docKey) {
+        return docService.getByNameOrSlugGlobal(docKey)
+            .flatMap(doc -> {
+                var kbName = doc.getSpec().getKnowledgeBaseName();
+                return knowledgeBaseService.get(kbName).flatMap(kb ->
+                    knowledgeBaseService.currentAccess().flatMap(access -> {
+                        var isPublic = Boolean.TRUE.equals(kb.getSpec().getPublicVisible());
+                        // 公开库：任何人可读但仅限已发布；私有库：仅权限者可见且任意阶段
+                        var ok = KnowledgeBaseService.canAccess(kb, access.username(),
+                                access.manage())
+                            && (!isPublic || isPublished(doc));
+                        if (ok) {
+                            return Mono.just(doc);
+                        }
+                        return Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND,
+                            "文档不存在: " + docKey));
+                    }));
+            });
+    }
+
+    private boolean isPublished(KnowledgeBaseDoc doc) {
+        return KnowledgeBaseDocService.PHASE_PUBLISHED.equals(doc.getSpec().getPhase());
     }
 
     /**
@@ -228,16 +279,6 @@ public class MinidocsPublicEndpoint implements CustomEndpoint {
                     return Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND,
                         "知识库不存在或无访问权限: " + kbSlug));
                 }));
-    }
-
-    /**
-     * 获取公开知识库（按 slug 或 metadata.name 解析，不存在或非公开时返回 404）。
-     */
-    private Mono<KnowledgeBase> getPublicKnowledgeBase(String kbSlug) {
-        return knowledgeBaseService.getBySlugOrName(kbSlug)
-            .filter(kb -> Boolean.TRUE.equals(kb.getSpec().getPublicVisible()))
-            .switchIfEmpty(Mono.error(
-                new ResponseStatusException(HttpStatus.NOT_FOUND, "知识库不存在: " + kbSlug)));
     }
 
     /**
