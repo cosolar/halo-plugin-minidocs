@@ -12,6 +12,7 @@ rules:
   - apiGroups: [ "minidocs.halo.run", "console.api.minidocs.halo.run" ]
     resources:
       - "knowledgebases"
+      - "knowledgebases/settings"
       - "knowledgebasedocs"
       - "knowledgebases/tree"
       - "knowledgebases/docs"
@@ -40,6 +41,17 @@ rules:
       - "knowledgebases/docs/move"
       - "knowledgebases/docs/export"
     verbs: [ "create", "patch", "update", "delete", "deletecollection" ]
+  # 供知识库成员选择器（UserSelect）读取用户列表，用于设置/展示知识库成员
+  - apiGroups: [ "api.console.halo.run" ]
+    resources: [ "users" ]
+    verbs: [ "get", "list" ]
+  - apiGroups: [ "" ]
+    resources: [ "users" ]
+    verbs: [ "get", "list" ]
+  # 供编辑器/封面本地图片上传（attach upload）使用
+  - apiGroups: [ "console.api.storage.halo.run" ]
+    resources: [ "attachments/upload" ]
+    verbs: [ "create" ]
 ---
 apiVersion: v1alpha1
 kind: Role

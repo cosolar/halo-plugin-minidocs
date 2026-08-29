@@ -40,4 +40,36 @@ export default definePlugin({
       },
     },
   ],
+  ucRoutes: [
+    {
+      parentName: "Root",
+      route: {
+        path: "/knowledge-bases",
+        name: "KnowledgeBases",
+        component: KnowledgeBaseList,
+        meta: {
+          title: "知识库",
+          permissions: [],
+          menu: {
+            name: "知识库",
+            group: "content",
+            icon: markRaw(IconBookRead),
+            priority: 60,
+          },
+        },
+      },
+    },
+    {
+      parentName: "Root",
+      route: {
+        path: "/knowledge-bases/:name",
+        name: "KnowledgeBaseDetail",
+        component: KnowledgeBaseDetail,
+        meta: {
+          title: "知识库详情",
+          permissions: [],
+        },
+      },
+    },
+  ],
 });

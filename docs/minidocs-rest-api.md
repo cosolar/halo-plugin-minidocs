@@ -133,6 +133,7 @@ Console API 位于 `console.api.minidocs.halo.run/v1alpha1`，供 Console 前端
 | 端点 | 方法 | 说明 |
 | --- | --- | --- |
 | `/apis/console.api.minidocs.halo.run/v1alpha1/knowledgebases/stats` | `GET` | 聚合当前用户**可访问**的知识库/文档统计（总数、公开/私有数、文档数、月度环比 `kbGrowth`/`docGrowth`、公开占比 `publicRatio`）；仅统计当前用户有权限访问的资源，避免向普通用户泄露私有库数量 |
+| `/apis/console.api.minidocs.halo.run/v1alpha1/knowledgebases/settings` | `GET` | 返回 `{ "codeBlockTheme": "…" }`，供 Markdown 编辑器读取代码块高亮主题（不依赖 Halo 超管专属的 `/json-config` 接口） |
 | `/apis/console.api.minidocs.halo.run/v1alpha1/knowledgebases` | `GET` | 分页列出知识库；支持 `keyword`、`publicVisible`、`page`、`size`、`sortBy` |
 | `/apis/console.api.minidocs.halo.run/v1alpha1/knowledgebases/{name}` | `GET` | 获取单个知识库（含私有） |
 | `/apis/console.api.minidocs.halo.run/v1alpha1/knowledgebases` | `POST` | 创建知识库 |
@@ -166,7 +167,7 @@ Console API 位于 `console.api.minidocs.halo.run/v1alpha1`，供 Console 前端
 | 角色模板 | 显示名 | 权限范围 |
 | --- | --- | --- |
 | `role-template-minidocs-view` | 知识库查看 | 对 `knowledgebases` / `knowledgebasedocs` 及其子资源的 `get` / `list` |
-| `role-template-minidocs-manage` | 知识库管理 | 在 view 基础上增加 `create` / `update` / `patch` / `delete` 等写权限；依赖 view |
+| `role-template-minidocs-manage` | 知识库管理 | 在 view 基础上增加 `create` / `update` / `patch` / `delete` 等写权限；依赖 view；并授权 `api.console.halo.run` 与内核组的 `users` 只读（`get` / `list`）供成员选择器，以及 `console.api.storage.halo.run` 的 `attachments/upload`（`create`）供本地图片/封面上传 |
 | `role-template-minidocs-anonymous` | （隐藏） | 聚合到 Halo 匿名用户，授权 `api.minidocs.halo.run` 公共 API：知识库 / 文档 / 文档树的只读（`get` / `list`），以及统计查询（`knowledgebases/stats`、`share/stats`）与点赞（`knowledgebases/like`、`share/like` 的 `create`）；不出现在角色分配界面 |
 
 匿名用户不会获得 view / manage 角色，但会被聚合授予 `role-template-minidocs-anonymous` 以访问公共 API；未登录访问 Console API 会被 Halo 网关拦截返回 `401` / `403`。主题若在已登录会话下调用写操作，需确保用户已被授予「知识库管理」角色，否则返回 `403`。

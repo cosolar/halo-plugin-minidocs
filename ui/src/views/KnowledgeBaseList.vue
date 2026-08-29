@@ -1228,30 +1228,38 @@ onMounted(() => {
               <span v-else class="kb-cover-placeholder">无封面</span>
             </div>
             <div class="kb-cover-actions">
-              <VButton size="sm" type="primary" @click="triggerKbCover">
-                <template #icon>
-                  <IconUpload class="h-3.5 w-3.5" />
-                </template>
-                上传封面
-              </VButton>
               <input
-                ref="kbCoverInput"
-                type="file"
-                accept="image/*"
-                class="hidden-file-input"
-                @change="onKbCoverChange"
+                v-model="form.cover"
+                type="text"
+                class="kb-cover-url-input"
+                placeholder="粘贴图片链接"
               />
-              <button
-                v-if="form.cover"
-                class="kb-cover-remove"
-                @click="form.cover = ''"
-              >
-                移除
-              </button>
+              <div class="kb-cover-btn-row">
+                <VButton size="sm" type="primary" @click="triggerKbCover">
+                  <template #icon>
+                    <IconUpload class="h-3.5 w-3.5" />
+                  </template>
+                  上传本地图片
+                </VButton>
+                <input
+                  ref="kbCoverInput"
+                  type="file"
+                  accept="image/*"
+                  class="hidden-file-input"
+                  @change="onKbCoverChange"
+                />
+                <button
+                  v-if="form.cover"
+                  class="kb-cover-remove"
+                  @click="form.cover = ''"
+                >
+                  移除封面
+                </button>
+              </div>
             </div>
           </div>
           <p class="formkit-help mt-1 text-xs text-gray-500">
-            支持上传本地图片作为封面，或填入图片链接
+            可直接粘贴图片链接，或上传本地图片作为封面
           </p>
         </div>
         <FormKit
@@ -2364,6 +2372,32 @@ onMounted(() => {
   flex-direction: column;
   align-items: flex-start;
   gap: 0.375rem;
+}
+
+.kb-cover-url-input {
+  width: 15rem;
+  max-width: 100%;
+  padding: 0.375rem 0.625rem;
+  font-size: 0.8125rem;
+  color: #374151;
+  border: 1px solid #d1d5db;
+  border-radius: 0.375rem;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.kb-cover-url-input::placeholder {
+  color: #9ca3af;
+}
+
+.kb-cover-url-input:focus {
+  border-color: #10b981;
+}
+
+.kb-cover-btn-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
 }
 
 .kb-cover-remove {

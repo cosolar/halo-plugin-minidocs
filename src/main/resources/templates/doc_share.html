@@ -1,9 +1,8 @@
 <!DOCTYPE html>
-<html
-  xmlns:th="https://www.thymeleaf.org"
-  th:replace="~{layout :: html(head = ~{::head}, content = ~{::content})}"
->
-  <th:block th:fragment="head">
+<html xmlns:th="https://www.thymeleaf.org">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title th:text="${gate ? '知识库分享访问' : (knowledgeBase != null and knowledgeBase.spec.displayName != null ? knowledgeBase.spec.displayName + ' - 知识库分享' : '知识库分享')}">知识库分享</title>
     <style>
       :root {
@@ -359,9 +358,9 @@
         .md-bottom-meta { display: none; }
       }
     </style>
-  </th:block>
+  </head>
 
-  <th:block th:fragment="content">
+  <body>
     <!-- 密码门：设置了访问密码且当前未通过校验时展示 -->
     <th:block th:if="${gate}">
       <nav class="site-nav">
@@ -1012,5 +1011,5 @@
         })();
       </script>
     </th:block>
-  </th:block>
+  </body>
 </html>

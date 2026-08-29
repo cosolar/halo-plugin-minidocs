@@ -1,9 +1,8 @@
 <!DOCTYPE html>
-<html
-  xmlns:th="https://www.thymeleaf.org"
-  th:replace="~{layout :: html(head = ~{::head}, content = ~{::content})}"
->
-  <th:block th:fragment="head">
+<html xmlns:th="https://www.thymeleaf.org">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>知识库</title>
     <style>
       :root {
@@ -196,7 +195,7 @@
         background: var(--md-primary-glow); color: var(--md-primary-deep);
       }
       .md-sec-title .ico svg { width: 16px; height: 16px; }
-      .md-search { position: relative; flex: 1 1 auto; max-width: 420px; }
+      .md-search { position: relative; flex: 0 1 320px; margin-left: auto; }
       .md-search .lens {
         position: absolute; left: 13px; top: 50%;
         transform: translateY(-50%);
@@ -224,7 +223,7 @@
       .md-search input::placeholder { color: var(--md-muted); }
       .md-search input:focus { border-color: var(--md-primary-soft); box-shadow: 0 0 0 3px var(--md-primary-glow); }
 
-      .md-toolbar-right { flex: 0 0 auto; display: flex; align-items: center; gap: 10px; margin-left: auto; }
+      .md-toolbar-right { flex: 0 0 auto; display: flex; align-items: center; gap: 10px; }
       .md-sort { position: relative; display: inline-flex; align-items: center; }
       .md-sort svg { position: absolute; left: 11px; width: 15px; height: 15px; color: var(--md-muted); pointer-events: none; }
       .md-sort select {
@@ -552,14 +551,34 @@
       @media (max-width: 640px) {
         .md-content { padding: 12px 12px 8px; }
         .md-toolbar { flex-wrap: wrap; }
+        .md-toolbar-right { margin-left: auto; }
         .md-search { flex: 1 1 100%; }
         .md-stats { display: flex; overflow-x: auto; gap: 10px; padding-bottom: 2px; }
         .md-stat { flex: 0 0 auto; min-width: 150px; }
       }
-    </style>
-  </th:block>
 
-  <th:block th:fragment="content">
+      /* 轻提示 */
+      .md-toast {
+        position: fixed;
+        left: 50%;
+        bottom: 28px;
+        transform: translate(-50%, 20px);
+        background: #111827;
+        color: #fff;
+        padding: 8px 16px;
+        font-size: 13px;
+        border-radius: 8px;
+        box-shadow: 0 6px 20px rgba(0, 0, 0, .25);
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity .2s ease, transform .2s ease;
+        z-index: 999;
+      }
+      .md-toast.show { opacity: 1; transform: translate(-50%, 0); }
+    </style>
+  </head>
+
+  <body>
     <div class="md-app"
          th:with="result=${minidocsFinder.listKnowledgeBases(1, 1000)}">
       <nav class="site-nav">
@@ -685,6 +704,9 @@
                      data-docs=${kb.status != null and kb.status.docCount != null ? kb.status.docCount : 0},
                      data-access=${kb.spec.accessCount != null ? kb.spec.accessCount : 0},
                      data-like=${kb.spec.likeCount != null ? kb.spec.likeCount : 0},
+                     data-liked=${loginUser != null and !#strings.isEmpty(loginUser)
+                                and kb.spec.likedUsers != null
+                                and kb.spec.likedUsers.contains(loginUser) ? '1' : '0'},
                      data-update=${kb.spec.updateTime != null ? kb.spec.updateTime : ''},
                      data-created=${kb.spec.creationTime != null ? kb.spec.creationTime : ''}"
                    th:href="@{'/docs/view/' +
@@ -757,6 +779,19 @@
         var all = Array.prototype.slice.call(grid.querySelectorAll('.md-kb-card'));
         var state = { q: '', tag: '', owner: '', sort: 'update', page: 1, perPage: 9, view: 'card' };
 
+        var toastEl = null;
+        function toast(msg) {
+          if (!toastEl) {
+            toastEl = document.createElement('div');
+            toastEl.className = 'md-toast';
+            document.body.appendChild(toastEl);
+          }
+          toastEl.textContent = msg;
+          toastEl.classList.add('show');
+          clearTimeout(toastEl._t);
+          toastEl._t = setTimeout(function () { toastEl.classList.remove('show'); }, 1800);
+        }
+
         var PALETTE = [
           'linear-gradient(135deg,#e11d48,#fb7185)',
           'linear-gradient(135deg,#0f766e,#14b8a6)',
@@ -812,30 +847,35 @@
           var slug = card.el.getAttribute('data-slug') || '';
           if (!slug) return;
           var badge = card.el.querySelector('.md-like-badge span');
+          var likedByServer = card.el.getAttribute('data-liked') === '1';
           function markLiked() {
             btn.classList.add('active');
             btn.classList.remove('popping');
             void btn.offsetWidth;
             btn.classList.add('popping');
           }
-          if (locallyLiked(slug)) btn.classList.add('active');
+          if (likedByServer || locallyLiked(slug)) btn.classList.add('active');
           btn.setAttribute('aria-label', '点赞：' + card.title);
           btn.setAttribute('title', '点赞：' + card.title);
           function doLike() {
-            if (locallyLiked(slug)) { markLiked(); return; }
+            if (likedByServer || locallyLiked(slug)) { toast('该知识库已点赞过了'); markLiked(); return; }
             fetch('/apis/api.minidocs.halo.run/v1alpha1/knowledgebases/'
                 + encodeURIComponent(slug) + '/like', { method: 'POST', credentials: 'include' })
               .then(function (r) { if (!r.ok) throw 0; return r.json(); })
               .then(function (data) {
                 try { localStorage.setItem(likeKey(slug), '1'); } catch (e) { /* 忽略隐私模式 */ }
                 markLiked();
+                var isNew = !data || data.newLike !== false;
                 if (data && typeof data.likeCount === 'number') {
                   if (badge) badge.textContent = data.likeCount;
-                  var stat = document.getElementById('md-stat-new');
-                  if (stat) stat.textContent = (parseInt(stat.textContent, 10) || 0) + 1;
+                  if (isNew) {
+                    var stat = document.getElementById('md-stat-new');
+                    if (stat) stat.textContent = (parseInt(stat.textContent, 10) || 0) + 1;
+                  }
                 }
+                toast(isNew ? '点赞成功' : '该知识库已经点过赞了');
               })
-              .catch(function () { /* 点赞失败静默 */ });
+              .catch(function () { toast('点赞失败，请稍后重试'); });
           }
           btn.addEventListener('click', function (e) { e.preventDefault(); e.stopPropagation(); doLike(); });
           btn.addEventListener('keydown', function (e) {
@@ -1104,5 +1144,5 @@
         render();
       })();
     </script>
-  </th:block>
+  </body>
 </html>

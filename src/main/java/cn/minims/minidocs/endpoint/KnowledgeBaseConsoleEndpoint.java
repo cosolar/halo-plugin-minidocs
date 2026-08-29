@@ -53,6 +53,7 @@ public class KnowledgeBaseConsoleEndpoint implements CustomEndpoint {
     public RouterFunction<ServerResponse> endpoint() {
         return route()
             .GET("/knowledgebases/stats", this::stats)
+            .GET("/knowledgebases/settings", this::settings)
             .GET("/knowledgebases", this::listKnowledgeBases)
             .GET("/knowledgebases/{name}", this::getKnowledgeBase)
             .POST("/knowledgebases", accept(MediaType.APPLICATION_JSON),
@@ -70,6 +71,15 @@ public class KnowledgeBaseConsoleEndpoint implements CustomEndpoint {
     private Mono<ServerResponse> stats(ServerRequest request) {
         return knowledgeBaseService.stats()
             .flatMap(stats -> ServerResponse.ok().bodyValue(stats));
+    }
+
+    private Mono<ServerResponse> settings(ServerRequest request) {
+        // 供 Markdown 编辑器读取代码块高亮主题；不依赖 Halo 超管专属的
+        // /apis/api.console.halo.run/.../json-config 接口
+        return settingFetcher.fetch("basic", BasicSetting.class)
+            .map(BasicSetting::codeBlockThemeOrDefault)
+            .defaultIfEmpty("default")
+            .flatMap(theme -> ServerResponse.ok().bodyValue(Map.of("codeBlockTheme", theme)));
     }
 
     private Mono<ServerResponse> listKnowledgeBases(ServerRequest request) {

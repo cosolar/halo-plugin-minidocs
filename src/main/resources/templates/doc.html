@@ -1,9 +1,8 @@
 <!DOCTYPE html>
-<html
-  xmlns:th="https://www.thymeleaf.org"
-  th:replace="~{layout :: html(head = ~{::head}, content = ~{::content})}"
->
-  <th:block th:fragment="head">
+<html xmlns:th="https://www.thymeleaf.org">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>知识库阅读</title>
     <style>
       :root {
@@ -712,6 +711,7 @@
         color: var(--md-sub);
       }
       .md-bottom-info { display: flex; align-items: center; gap: 14px; min-width: 0; }
+      .md-bottom-info .md-auth-ico { width: 14px; height: 14px; vertical-align: -2px; margin-right: 5px; flex: none; }
       .md-bottom .md-back-top { margin-left: auto; }
       .md-bottom-title {
         color: var(--md-title);
@@ -772,9 +772,9 @@
         .md-title { font-size: 22px; }
       }
     </style>
-  </th:block>
+  </head>
 
-  <th:block th:fragment="content">
+  <body>
     <nav class="site-nav">
       <a class="nav-brand" th:href="@{/}">
         <img th:if="${site.logo != null and !#strings.isEmpty(site.logo)}"
@@ -930,7 +930,12 @@
           <span><b id="md-lines">0</b> 行</span>
           <span th:if="${doc.spec.author != null and !doc.spec.author.isEmpty()}">
             <span class="sep"></span>
-            作者 <span th:text="${doc.spec.author}"></span>
+            <svg class="md-auth-ico" aria-label="作者" width="14" height="14" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+              <circle cx="12" cy="7" r="4"></circle>
+            </svg>
+            <span th:text="${doc.spec.author}"></span>
           </span>
         </div>
         <div class="md-bottom-meta">
@@ -1418,5 +1423,5 @@
         };
       })();
     </script>
-  </th:block>
+  </body>
 </html>

@@ -94,7 +94,7 @@ function getPrism(): any {
   return loadedPrism;
 }
 // Halo 附件上传：使用控制台 API 上传到默认存储策略，返回 Attachment 的公开访问地址
-import { consoleApiClient } from "@halo-dev/api-client";
+import { axiosInstance, consoleApiClient } from "@halo-dev/api-client";
 
 const props = withDefaults(
   defineProps<{
@@ -150,13 +150,11 @@ async function loadCodeBlockTheme() {
   }
   codeBlockThemeLoaded = true;
   try {
-    const { data } = await consoleApiClient.plugin.plugin.fetchPluginJsonConfig({
-      name: "halo-plugin-minidocs",
-    });
-    // 插件配置按设置分组返回（如 { basic: { siteName, codeBlockTheme, ... } }）
-    const cfg = data as Record<string, any>;
-    const theme =
-      cfg?.basic?.codeBlockTheme ?? (cfg as any)?.codeBlockTheme;
+    // 从插件自己的 console 端点读取（Halo 的 /json-config 是超管专属，普通角色会 403）
+    const { data } = await axiosInstance.get(
+      "/apis/console.api.minidocs.halo.run/v1alpha1/knowledgebases/settings"
+    );
+    const theme = (data as { codeBlockTheme?: string })?.codeBlockTheme;
     if (typeof theme === "string" && theme.trim()) {
       codeBlockTheme = theme.trim();
     }

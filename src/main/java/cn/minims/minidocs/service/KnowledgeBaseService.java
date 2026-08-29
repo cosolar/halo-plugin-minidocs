@@ -262,6 +262,7 @@ public class KnowledgeBaseService {
                     Map<String, Object> result = new LinkedHashMap<>();
                     result.put("likeCount", max0(spec.getLikeCount()));
                     result.put("liked", true);
+                    result.put("newLike", false);
                     return Mono.just(result);
                 }
                 if (StringUtils.hasText(username)) {
@@ -278,6 +279,7 @@ public class KnowledgeBaseService {
                         result.put("likeCount", specAfter.getLikeCount() == null ? 0L
                             : specAfter.getLikeCount());
                         result.put("liked", true);
+                        result.put("newLike", true);
                         return result;
                     });
             });

@@ -9,7 +9,8 @@ import io.swagger.v3.oas.annotations.media.Schema;
  */
 public record BasicSetting(
     @Schema(description = "允许未登录用户阅读公开知识库") Boolean allowAnonymousRead,
-    @Schema(description = "允许导出文档（Markdown）") Boolean allowDocExport) {
+    @Schema(description = "允许导出文档（Markdown）") Boolean allowDocExport,
+    @Schema(description = "代码块高亮主题") String codeBlockTheme) {
 
     public boolean anonymousReadEnabled() {
         return allowAnonymousRead == null || allowAnonymousRead;
@@ -17,5 +18,9 @@ public record BasicSetting(
 
     public boolean docExportEnabled() {
         return allowDocExport == null || allowDocExport;
+    }
+
+    public String codeBlockThemeOrDefault() {
+        return codeBlockTheme == null || codeBlockTheme.isBlank() ? "default" : codeBlockTheme;
     }
 }
