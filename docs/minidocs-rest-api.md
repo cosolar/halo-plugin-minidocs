@@ -34,15 +34,52 @@
 ### 统计与点赞
 
 - `GET /knowledgebases/{kbSlug}/stats`：返回 `accessCount`（访问量）、`likeCount`（点赞数）、`liked`（**当前登录用户**是否已点赞，匿名恒为 `false`）。允许访问「公开知识库」或「当前用户有权限访问的私有知识库」；匿名访问公开库需站点开启匿名阅读。
-- `POST /knowledgebases/{kbSlug}/like`：点赞（幂等，重复调用不会叠加）。已登录用户由服务端按用户名去重；匿名用户由前端 `localStorage` 缓存防止重复点赞。返回最新 `{"likeCount": n, "liked": true}`。
+- `POST /knowledgebases/{kbSlug}/like`：点赞（幂等，重复调用不会叠加、点赞后不可取消）。已登录用户由服务端按用户名去重；匿名用户由前端 `localStorage` 缓存防止重复点赞。返回 `{"likeCount": n, "liked": true, "newLike": true|false}`。
 
 ```bash
 # 查询统计
 curl "https://your-halo-site/apis/api.minidocs.halo.run/v1alpha1/knowledgebases/kb-abc/stats"
+# → {"accessCount":128,"likeCount":7,"liked":false}
 
 # 点赞（幂等）
-curl -X POST "https://your-halo-site/apis/api.minidocs.halo.run/v1alpha1/knowledgebases/kb-abc/like"
+curl -X POST -b "session-cookie" \
+  "https://your-halo-site/apis/api.minidocs.halo.run/v1alpha1/knowledgebases/kb-abc/like"
+# → {"likeCount":8,"liked":true,"newLike":true}
 ```
+
+#### 点赞响应字段 `newLike`
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `likeCount` | `number` | 服务端返回的最新点赞数（可直接覆盖前端数字，无需本地 +1 累加） |
+| `liked` | `boolean` | 当前请求者是否已点赞。点赞成功后恒为 `true`（点赞不可取消）——**不要用它判断"本次是不是新点赞"** |
+| `newLike` | `boolean` | 本次请求是否**实际新增**了一次点赞：`true` 表示 `likeCount` 确实 +1；`false` 表示命中幂等（该登录用户已在 `spec.likedUsers` 中），本次**没有** +1、没有取消，返回的只是当前值 |
+
+`newLike` 的用意：点赞接口是「幂等写」——重复提交既不会叠加也不会报错，仅凭 `likeCount` 无法区分"这次真加了一分"还是"只是查了当前值"。它用于让调用方区分三种结果：
+
+- 首次点赞 → `newLike: true`：播放点赞动效、提示"点赞成功"。
+- 已点过赞再次提交 → `newLike: false`：仅把按钮置为已点赞态，提示"已经点过赞了"，避免重复计数与误导性动效。
+- 旧版本服务端 / 兼容场景 → 字段缺失：调用方应按「新增」处理（前端兜底 `data.newLike !== false`），保持向后兼容。
+
+调用方推荐用法（浏览器端）：
+
+```js
+fetch('/apis/api.minidocs.halo.run/v1alpha1/knowledgebases/'
+    + encodeURIComponent(kbSlug) + '/like', { method: 'POST', credentials: 'include' })
+  .then(r => { if (!r.ok) throw r; return r.json(); })
+  .then(data => {
+    const isNew = data.newLike !== false;          // 字段缺失时按新增兼容
+    badge.textContent = data.likeCount;             // 用服务端返回值覆盖，不要本地累加
+    btn.classList.add('active');                    // liked 恒为 true，统一置为已点赞
+    toast(isNew ? '点赞成功' : '该知识库已经点过赞了');
+  });
+```
+
+注意事项：
+
+- **匿名用户（未登录）**服务端不写入 `spec.likedUsers`（无法区分访客身份），因此匿名重复调用会始终返回 `newLike: true` 且真实 +1。前端必须自行用 `localStorage`（如键 `minidocs:like:{kbSlug}`）去重后再发起请求，否则刷新 / 多标签会重复计数。
+- 建议先读 `GET .../stats` 的 `liked` 决定按钮初始态，再由 `POST .../like` 的 `newLike` 决定本次反馈文案；两者配合即可完整覆盖"已点赞用户的页面初始化"与"点击后的即时反馈"。
+- `share/{shareToken}/like` 返回结构与上述完全一致（同为 `likeOnce` 实现），`newLike` 语义相同；`share/{shareToken}/stats` 只返回 `accessCount` / `likeCount` / `liked`，**不含** `newLike`。
 
 ### 分享外链 API（不走常规权限）
 

@@ -248,7 +248,8 @@ public class KnowledgeBaseService {
      * <p>匿名用户（username 为空）不写入 likedUsers（服务端无法区分匿名者），
      * 其去重交给前端 localStorage 缓存记录；服务端仅做幂等保护防止重复请求重复 +1。
      *
-     * @return 结果 Map，包含 {@code likeCount}（最新点赞数）与 {@code liked}（是否已点过赞）。
+     * @return 结果 Map，包含 {@code likeCount}（最新点赞数）、{@code liked}（是否已点过赞，
+     * 点赞成功后恒为 true）、{@code newLike}（本次请求是否实际新增一次点赞；命中幂等时为 false）。
      */
     public Mono<Map<String, Object>> likeOnce(String kbName, String username) {
         return client.fetch(KnowledgeBase.class, kbName)
