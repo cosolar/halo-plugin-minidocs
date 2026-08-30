@@ -333,6 +333,7 @@
 
       .md-bottom { position: fixed; left: 0; right: 0; bottom: 0; height: var(--md-bottom-h); z-index: 70; display: flex; align-items: center; gap: 16px; padding: 0 16px; background: var(--md-bg1); border-top: 1px solid var(--md-border); font-size: 12px; color: var(--md-sub); }
       .md-bottom-info { display: flex; align-items: center; gap: 14px; min-width: 0; }
+      .md-bottom-info .md-auth-ico { width: 14px; height: 14px; vertical-align: -2px; margin-right: 5px; flex: none; }
       .md-bottom .md-back-top { margin-left: auto; }
       .md-bottom-title { color: var(--md-title); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40vw; }
       .md-bottom-meta { display: flex; align-items: center; gap: 16px; white-space: nowrap; overflow: hidden; }
@@ -536,7 +537,12 @@
             <span><b id="md-lines">0</b> 行</span>
             <span th:if="${doc.spec.author != null and !doc.spec.author.isEmpty()}">
               <span class="sep"></span>
-              作者 <span th:text="${doc.spec.author}"></span>
+              <svg class="md-auth-ico" aria-label="作者" width="14" height="14" viewBox="0 0 24 24" fill="none"
+                   stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                <circle cx="12" cy="7" r="4"></circle>
+              </svg>
+              <span th:text="${doc.spec.author}"></span>
             </span>
           </div>
           <div class="md-bottom-meta">

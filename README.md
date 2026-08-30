@@ -12,9 +12,9 @@ MiniDocs 是 Halo 2.x 的轻量知识库插件，用于搭建团队 / 个人知�
 
 ## 演示界面
 
-![知识库管理界面.png](docs/images/%E7%9F%A5%E8%AF%86%E5%BA%93%E7%AE%A1%E7%90%86%E7%95%8C%E9%9D%A2.png)
+![知识库管理界面.png](docs/images/knowledge-management.png)
 
-![知识库文档管理界面.png](docs/images/%E7%9F%A5%E8%AF%86%E5%BA%93%E6%96%87%E6%A1%A3%E7%AE%A1%E7%90%86%E7%95%8C%E9%9D%A2.png)
+![知识库文档管理界面.png](docs/images/doc-managerment.png)
 
 ## 功能特性
 
