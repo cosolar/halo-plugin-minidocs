@@ -6,8 +6,9 @@ plugins {
 
 group = 'cn.minims.minidocs'
 description = 'A knowledge base plugin for Halo'
-// devtools 的 generatePluginComponentsIdx 等任务要求项目版本已设置
-version = '1.0.0'
+// 唯一版本源：完整 build 时 devtools 的 generatePluginComponentsIdx 会自动把该版本
+// 写入 plugin.yaml 的 spec.version（jar 文件名同样取自该版本）
+version = '1.0.1'
 
 repositories {
     mavenCentral()

@@ -5,13 +5,14 @@ metadata:
 spec:
   enabled: true
   requires: ">=2.26.0"
-  version: 1.0.0
+  # 打包时由 build.gradle 的 version 自动覆盖（devtools 内置同步），请改 build.gradle 而非此处
+  version: 1.0.1
   author:
     name: Cosolar
     website: https://note.minims.cn
   logo: logo.svg
   displayName: "知识库"
-  description: "在 Halo 平台上搭建个人或团队知识库：多知识库管理、文档树、Markdown 编辑、分类标签与权限控制"
+  description: "MiniDocs 知识库插件以轻量、简约的设计，可满足日常个人知识沉淀、笔记归档及团队项目文档、协作手册搭建需求，并将知识库内容通过公开接口与 Finder 暴露给第三方主题，方便开发用户侧文档站点。"
   homepage: https://github.com/cosolar/halo-plugin-minidocs
   repo: https://github.com/cosolar/halo-plugin-minidocs
   license:
