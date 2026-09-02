@@ -12,11 +12,15 @@ plugin-minidocs 知识库插件以轻量、简约的设计，可满足日常个�
 
 > 目标平台：Halo `>= 2.26.0`
 
-## 演示界面
+## 控制台演示界面
 
-![知识库管理界面.png](docs/images/knowledge-management.png)
+![img.png](docs/images/img.png)
 
-![知识库文档管理界面.png](docs/images/doc-managerment.png)
+![img_1.png](docs/images/img_1.png)
+
+## 主题演示界面
+
+[☞主题端效果预览](https://note.minims.cn/docs)
 
 ## 功能特性
 

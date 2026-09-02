@@ -19,6 +19,7 @@ import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.reactive.function.server.RouterFunction;
 import org.springframework.web.reactive.function.server.ServerRequest;
 import org.springframework.web.reactive.function.server.ServerResponse;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import run.halo.app.core.extension.endpoint.CustomEndpoint;
 import run.halo.app.extension.GroupVersion;
@@ -145,33 +146,29 @@ public class KnowledgeBaseConsoleEndpoint implements CustomEndpoint {
                         }
                         return List.<String>of();
                     })
-                    .flatMap(names -> knowledgeBaseService.currentAccess().flatMap(access -> {
-                        // 只导出当前用户有权访问的知识库（私有非成员不可导出）
-                        var accessible = names.stream()
-                            .filter(n -> filterExportAccessible(n, access))
-                            .toList();
-                        return docService.exportZip(accessible)
-                            .flatMap(bytes -> ServerResponse.ok()
-                                .contentType(MediaType.APPLICATION_OCTET_STREAM)
-                                .header(HttpHeaders.CONTENT_DISPOSITION,
-                                    "attachment; filename=\"minidocs" + exportTimestamp() + ".zip\"")
-                                .bodyValue(new ByteArrayResource(bytes)));
-                    }));
+                    .flatMap(names -> knowledgeBaseService.currentAccess().flatMap(access ->
+                        // 只导出当前用户有权访问的知识库（私有非成员不可导出）；
+                        // 用 filterWhen 全响应式过滤，避免在 reactor 线程上 block 报错
+                        Flux.fromIterable(names)
+                            .filterWhen(n -> knowledgeBaseService.get(n)
+                                .map(kb -> KnowledgeBaseService.canAccess(
+                                    kb, access.username(), access.manage()))
+                                .onErrorReturn(false)
+                                .defaultIfEmpty(false))
+                            .collectList()
+                            .flatMap(accessible -> docService.exportZip(accessible)
+                                .flatMap(bytes -> ServerResponse.ok()
+                                    .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                                    .header(HttpHeaders.CONTENT_DISPOSITION,
+                                        "attachment; filename=\"minidocs"
+                                            + exportTimestamp() + ".zip\"")
+                                    .bodyValue(new ByteArrayResource(bytes))))));
             });
     }
 
     private static String exportTimestamp() {
         return DateTimeFormatter.ofPattern("yyyyMMddHHmmssSSS")
             .format(LocalDateTime.now());
-    }
-
-    private boolean filterExportAccessible(String name, KnowledgeBaseService.UserAccess access) {
-        // 用 try 忽略不存在的知识库（保留原行为不阻塞导出）
-        return knowledgeBaseService.get(name)
-            .map(kb -> KnowledgeBaseService.canAccess(kb, access.username(), access.manage()))
-            .onErrorReturn(false)
-            .blockOptional()
-            .orElse(false);
     }
 
     private Mono<ServerResponse> importKnowledgeBasePreview(ServerRequest request) {

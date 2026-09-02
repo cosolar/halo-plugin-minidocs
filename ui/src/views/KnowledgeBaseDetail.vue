@@ -147,6 +147,30 @@ const markdownEditorRef = ref<{
 const expanded = ref<Set<string>>(new Set());
 const allExpanded = ref(false);
 
+// localStorage 布局状态 key（按知识库区分）
+const layoutStorageKey = () => `minidocs:kb-layout:${kbName}`;
+function restoreLayout() {
+  try {
+    const raw = localStorage.getItem(layoutStorageKey());
+    if (!raw) return;
+    const data = JSON.parse(raw);
+    if (data.expanded && Array.isArray(data.expanded)) {
+      expanded.value = new Set(data.expanded);
+    }
+    if (typeof data.sidebarWidth === "number") {
+      sidebarWidth.value = Math.min(600, Math.max(220, data.sidebarWidth));
+    }
+  } catch { /* ignore */ }
+}
+function persistLayout() {
+  try {
+    localStorage.setItem(layoutStorageKey(), JSON.stringify({
+      expanded: Array.from(expanded.value),
+      sidebarWidth: sidebarWidth.value,
+    }));
+  } catch { /* ignore */ }
+}
+
 // 左侧边栏拖拽调整宽度（默认 280px，可拖 220~600px），右侧主区随 flex 自动跟随
 const sidebarWidth = ref(280);
 let resizeStartX = 0;
@@ -331,6 +355,39 @@ function toggleExpandAll() {
 
 function hasChildren(node: DocTreeNode) {
   return (node.children || []).length > 0;
+}
+
+// 在文档树中按 name 查找节点，返回节点及祖先链（自顶向下）
+function findNodeInTree(
+  nodes: DocTreeNode[],
+  name: string,
+  ancestors: DocTreeNode[] = []
+): { node: DocTreeNode; ancestors: DocTreeNode[] } | null {
+  for (const node of nodes) {
+    if (node.name === name) {
+      return { node, ancestors };
+    }
+    if (node.children?.length) {
+      const found = findNodeInTree(node.children, name, [...ancestors, node]);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+// 返回文档树中第一个叶子文章节点及祖先链（自顶向下）
+function findFirstLeaf(
+  nodes: DocTreeNode[],
+  ancestors: DocTreeNode[] = []
+): { node: DocTreeNode; ancestors: DocTreeNode[] } | null {
+  for (const node of nodes) {
+    if (!node.children?.length) {
+      return { node, ancestors };
+    }
+    const found = findFirstLeaf(node.children, [...ancestors, node]);
+    if (found) return found;
+  }
+  return null;
 }
 
 const moveOptions = computed(() => {
@@ -684,6 +741,8 @@ async function loadTree() {
 
 async function selectDoc(node: DocTreeNode) {
   selected.value = node;
+  // 同步到 URL query，刷新后可恢复
+  router.replace({ query: { ...route.query, doc: node.name } });
   docLoading.value = true;
   try {
     const { data } = await axiosInstance.get(
@@ -1171,8 +1230,28 @@ async function confirmImport() {
   }
 }
 
+// 持久化布局状态：目录展开 / 侧边栏宽度
+watch(
+  () => Array.from(expanded.value),
+  () => persistLayout(),
+  { deep: true }
+);
+watch(sidebarWidth, () => persistLayout());
+
 onMounted(async () => {
+  restoreLayout();
   await Promise.all([loadKb(), loadTree()]);
+  if (!tree.value.length) return;
+  // 从 URL query 恢复当前选中的文档（刷新记忆）；无指定时默认打开第一篇文章
+  const docName = route.query.doc as string | undefined;
+  const hit = docName
+    ? findNodeInTree(tree.value, docName)
+    : findFirstLeaf(tree.value);
+  if (hit) {
+    // 展开所有祖先节点
+    hit.ancestors.forEach((a) => expanded.value.add(a.name));
+    await selectDoc(hit.node);
+  }
 });
 </script>
 
@@ -1289,11 +1368,6 @@ onMounted(async () => {
                   </span>
 
                   <span class="node-title">{{ item.node.title }}</span>
-
-                  <span
-                    class="node-status-dot"
-                    :class="{ published: item.node.phase === 'published' }"
-                  ></span>
 
                   <div class="node-actions" @click.stop>
                     <button
@@ -2136,18 +2210,6 @@ onMounted(async () => {
   white-space: nowrap;
   font-size: 0.8125rem;
   color: #595959;
-}
-
-.node-status-dot {
-  width: 0.375rem;
-  height: 0.375rem;
-  flex-shrink: 0;
-  border-radius: 9999px;
-  background: #d9d9d9;
-}
-
-.node-status-dot.published {
-  background: #2563eb;
 }
 
 .node-actions {

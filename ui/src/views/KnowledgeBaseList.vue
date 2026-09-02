@@ -147,9 +147,9 @@ async function exportSelected() {
   await doExport(selectedNames.value);
 }
 async function exportOne(kb: KnowledgeBase) {
-  await doExport([kb.metadata.name]);
+  await doExport([kb.metadata.name], kb.spec.slug || "");
 }
-async function doExport(names: string[]) {
+async function doExport(names: string[], filename = "") {
   exporting.value = true;
   try {
     const response = await axiosInstance.post(
@@ -161,7 +161,10 @@ async function doExport(names: string[]) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `minidocs${exportTimestamp()}.zip`;
+    // 优先用别名（slug）命名，别名为空时回退到时间戳命名
+    a.download = filename
+      ? `${filename}.zip`
+      : `MiniDocs-${exportTimestamp()}.zip`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);

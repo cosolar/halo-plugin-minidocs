@@ -848,7 +848,8 @@
                 li.appendChild(item);
                 parentList.appendChild(li);
                 if (hasKids) {
-                  li.classList.add('toc-fold');
+                  // 默认展开到二级标题：H1 展开出 H2，H2 及更深折叠（隐藏 H3 及以下行）
+                  if (it.lvl >= 2) li.classList.add('toc-fold');
                   var childUl = document.createElement('ul');
                   li.appendChild(childUl);
                   build(it.children, childUl);

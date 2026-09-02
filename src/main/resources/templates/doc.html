@@ -998,79 +998,84 @@
       (function () {
         'use strict';
 
-        // 知识库访问量 / 点赞（匿名也可点赞，前端 localStorage 缓存去重，一次性点赞）
-        (function () {
-          var kbSlug = /*[[${kbSlug}]]*/ '';
-          var likeBtn = document.getElementById('md-like');
-          var likeCountEl = document.getElementById('md-like-count');
-          var viewCountEl = document.getElementById('md-view-count');
-          function api(path) {
-            return '/apis/api.minidocs.halo.run/v1alpha1/knowledgebases/'
-              + encodeURIComponent(kbSlug) + path;
+        var KBSLUG = /*[[${kbSlug}]]*/ '';
+
+        // ===== 知识库访问量 / 点赞（匿名可赞，localStorage 去重，一次性点赞） =====
+        var likeBtn = document.getElementById('md-like');
+        var likeCountEl = document.getElementById('md-like-count');
+        var viewCountEl = document.getElementById('md-view-count');
+
+        function likeApi(path) {
+          return '/apis/api.minidocs.halo.run/v1alpha1/knowledgebases/'
+            + encodeURIComponent(KBSLUG) + path;
+        }
+        function likeKey() { return 'minidocs:like:' + KBSLUG; }
+        function locallyLiked() {
+          try { return localStorage.getItem(likeKey()) === '1'; } catch (e) { return false; }
+        }
+        function setLocallyLiked() {
+          try { localStorage.setItem(likeKey(), '1'); } catch (e) {}
+        }
+        function markLiked() {
+          if (!likeBtn) return;
+          likeBtn.classList.add('is-liked');
+          likeBtn.classList.remove('popping');
+          void likeBtn.offsetWidth; // 强制 reflow 以重触发心跳动画
+          likeBtn.classList.add('popping');
+        }
+        function updateLikeUi(count, liked) {
+          if (likeCountEl && typeof count === 'number') likeCountEl.textContent = count;
+          if (liked) markLiked();
+        }
+        function refreshLikeUi(data) {
+          if (!data) return;
+          if (typeof data.likeCount === 'number' && likeCountEl) {
+            likeCountEl.textContent = data.likeCount;
           }
-          function likeKey() { return 'minidocs:like:' + kbSlug; }
-          function locallyLiked() {
-            try { return localStorage.getItem(likeKey()) === '1'; } catch (e) { return false; }
-          }
-          function setLocallyLiked() {
-            try { localStorage.setItem(likeKey(), '1'); } catch (e) {}
-          }
-          // 展示已赞：登录用户由服务端返回、匿名/本机已赞由 localStorage 兜底
-          function markLiked() {
-            if (!likeBtn) return;
-            likeBtn.classList.add('is-liked');
-            likeBtn.classList.remove('popping');
-            void likeBtn.offsetWidth; // 强制 reflow 以重触发心跳动画
-            likeBtn.classList.add('popping');
-          }
-          function updateLikeUi(count, liked) {
-            if (likeCountEl && typeof count === 'number') likeCountEl.textContent = count;
-            if (liked) markLiked();
-          }
-          function refreshLikeUi(data) {
-            if (data && typeof data.likeCount === 'number' && likeCountEl) {
-              likeCountEl.textContent = data.likeCount;
-            }
-            var liked = !!(data && data.liked) || locallyLiked();
-            if (likeBtn) likeBtn.classList.toggle('is-liked', liked);
-          }
-          if (kbSlug) {
-            // 拉取最新访问量 / 点赞量 / 是否已赞，校正服务端渲染值
-            fetch(api('/stats'), { credentials: 'include' })
-              .then(function (r) { return r.ok ? r.json() : null; })
-              .then(function (data) {
-                if (data) {
-                  refreshLikeUi(data);
-                  if (viewCountEl && typeof data.accessCount === 'number') {
-                    viewCountEl.textContent = data.accessCount;
-                  }
+          var liked = !!data.liked || locallyLiked();
+          if (likeBtn) likeBtn.classList.toggle('is-liked', liked);
+        }
+
+        function initLike() {
+          if (!KBSLUG) return;
+
+          // 拉取最新访问量 / 点赞量 / 是否已赞，校正服务端渲染值
+          fetch(likeApi('/stats'), { credentials: 'include' })
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (data) {
+              if (data) {
+                refreshLikeUi(data);
+                if (viewCountEl && typeof data.accessCount === 'number') {
+                  viewCountEl.textContent = data.accessCount;
                 }
-              })
-              .catch(function () {});
-          }
-          if (likeBtn && kbSlug) {
-            likeBtn.addEventListener('click', function () {
-              if (locallyLiked()) {
-                toast('该知识库已点赞过了');
-                markLiked();
-                return;
               }
-              fetch(api('/like'), { method: 'POST', credentials: 'include' })
-                .then(function (r) {
-                  if (!r.ok) throw { failed: true };
-                  return r.json();
-                })
-                .then(function (data) {
-                  setLocallyLiked();
-                  updateLikeUi(data && data.likeCount, true);
-                  toast('点赞成功');
-                })
-                .catch(function () {
-                  toast('点赞失败，请稍后重试');
-                });
-            });
-          }
-        })();
+            })
+            .catch(function (e) { console.warn('[minidocs] like stats failed', e); });
+
+          if (!likeBtn) return;
+          likeBtn.addEventListener('click', function () {
+            if (locallyLiked()) {
+              toast('该知识库已点赞过了');
+              markLiked();
+              return;
+            }
+            fetch(likeApi('/like'), { method: 'POST', credentials: 'include' })
+              .then(function (r) {
+                if (!r.ok) throw new Error('like http ' + r.status);
+                return r.json();
+              })
+              .then(function (data) {
+                setLocallyLiked();
+                var count = data && typeof data.likeCount === 'number' ? data.likeCount : 0;
+                updateLikeUi(count, true);
+                toast('点赞成功');
+              })
+              .catch(function (e) {
+                console.error('[minidocs] like failed', e);
+                toast('点赞失败，请稍后重试');
+              });
+          });
+        }
 
         function toast(msg) {
           var t = document.getElementById('md-toast');
@@ -1125,6 +1130,7 @@
 
         var prose = document.getElementById('md-prose');
         if (prose) { try { enhanceProse(); } catch (e) {} try { enableCherryMermaidTabs(); } catch (e) {} fillBottomMeta(); }
+        initLike();
         formatTimes();
 
         // 将 ISO 时间格式化为 yyyy-MM-dd HH:mm:ss（本地时区）
@@ -1247,7 +1253,8 @@
               li.appendChild(item);
               parentList.appendChild(li);
               if (hasKids) {
-                li.classList.add('toc-fold');
+                // 默认展开到二级标题：H1 展开出 H2，H2 及更深折叠（隐藏 H3 及以下行）
+                if (it.lvl >= 2) li.classList.add('toc-fold');
                 var childUl = document.createElement('ul');
                 li.appendChild(childUl);
                 build(it.children, childUl);
