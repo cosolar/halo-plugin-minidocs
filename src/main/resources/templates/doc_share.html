@@ -4,6 +4,8 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title th:text="${gate ? '知识库分享访问' : (knowledgeBase != null and knowledgeBase.spec.displayName != null ? knowledgeBase.spec.displayName + ' - 知识库分享' : '知识库分享')}">知识库分享</title>
+    <!-- KaTeX 样式：渲染 cherry-markdown 已生成的公式 HTML（内置 .katex / .katex-display 排版与 KaTeX 字体） -->
+    <link rel="stylesheet" th:href="@{/plugins/halo-plugin-minidocs/assets/static/katex/katex.min.css}">
     <style>
       :root {
         --md-primary: #10b981;
