@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
@@ -487,7 +488,7 @@ public class KnowledgeBaseDocService {
     }
 
     private String randomSuffix() {
-        return UUID.randomUUID().toString().substring(0, 6);
+        return String.format("%06d", ThreadLocalRandom.current().nextInt(1_000_000));
     }
 
     // ==================== 知识库导入 / 导出 ====================
