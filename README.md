@@ -34,6 +34,7 @@ plugin-minidocs 知识库插件以轻量、简约的设计，可满足日常个�
 - 文档导入导出：支持批量导入（同名知识库安全覆盖、失败自动回滚保留原数据），以及将文档导出为 Markdown（受导出开关约束）。
 - 外链分享：知识库卡片可一键开启外链分享，生成 `/docs/share/{token}` 对外链接，支持可选访问密码与有效期，分享页与阅读页同布局且无需登录。
 - 主题适配：提供 `minidocsFinder` Finder API 与匿名公共 REST API，便于主题渲染知识库列表、文档树与文档详情。
+- AI 智能体技能（Skills）：内置 `minidocs-cli` Agent Skill，供 Claude Code / Codex / TRAE 等智能体直接管理知识库与文档。
 
 ## 安装使用
 
@@ -166,6 +167,41 @@ MiniDocs 支持为知识库开启「外链分享」，把知识库内容通过�
 
 - [主题 API 文档](./docs/minidocs-theme-api.md) — 路由、Finder API、Markdown 渲染与类型定义。
 - [REST API 文档](./docs/minidocs-rest-api.md) — 公共 API、Console API 和标准 CRUD 端点。
+
+## AI 技能（Skills）
+
+仓库内置了遵循 [Agent Skills 开放标准](https://agentskills.io) 的技能包 `skills/minidocs-cli`，让 AI 编程智能体（Claude Code、OpenAI Codex、TRAE、OpenCode、GitHub Copilot 等 20+ 工具）通过命令行工具 `minidocs-cli` 直接管理 MiniDocs 的知识库与文档，无需手写 API 请求。
+
+- **能力**：知识库的列表 / 创建 / 修改 / 统计 / 删除 / ZIP 导入导出，文档的列表 / 文档树 / 创建 / 修改 / 发布·取消发布 / 移动排序 / Markdown 导入导出，等价覆盖 Console 中的主要操作。
+- **前置条件**：Node.js >= 22，并安装 CLI：
+
+  ```bash
+  npm install -g minidocs-cli
+  minidocs --version
+  ```
+
+- **安装技能**：将 `skills/minidocs-cli` 整个目录复制到目标智能体的 skills 目录（目录名保持 `minidocs-cli`），如 Claude Code 的 `~/.claude/skills/`（用户级）或 `.claude/skills/`（项目级）；详见 [INSTALL.md](./skills/minidocs-cli/INSTALL.md)。
+- **认证**：CLI 使用 Halo 个人访问令牌（PAT）或 Basic 认证，首次使用需登录并保存 profile：
+
+  ```bash
+  minidocs auth login --profile my-site --url https://example.halo.run \
+    --auth-type bearer --token <personal-access-token>
+  minidocs auth profile doctor    # 校验凭据
+  ```
+
+- **常用命令**：
+
+  ```bash
+  minidocs kb list --json                                 # 列出知识库
+  minidocs doc tree my-kb                                 # 文档层级树
+  minidocs doc import my-kb --files a.md,b.md             # 批量导入 Markdown
+  minidocs doc publish my-kb <docName>                    # 发布文档
+  minidocs kb export --names my-kb --output kbs.zip       # 导出知识库 ZIP
+  ```
+
+- **文档**：[SKILL.md](./skills/minidocs-cli/SKILL.md)（工作流）· [完整命令](./skills/minidocs-cli/references/commands.md) · [错误排查](./skills/minidocs-cli/references/troubleshooting.md)。使用教程见 [使用教程「用 AI 智能体技能（Skills）管理知识库」](./docs/minidocs-user-guide.md)。
+
+> 删除、覆盖导入等危险操作默认需要二次确认，在脚本 / CI 等非交互环境中需显式加 `--force`（导入也可用 `--strategy skip` 跳过重名）；知识库删除会级联删除其全部文档，不可恢复。
 
 ## 开发文档
 

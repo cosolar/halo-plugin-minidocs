@@ -166,10 +166,89 @@ MiniDocs 支持把知识库通过一条**外链**分发给任意访客。点击�
 3. **对外文档站**：设为「公开 + 允许未登录阅读」，再结合 `minidocsFinder` / 公共 REST API 在主题中渲染知识库列表与文档内容。
 4. **临时对外分享**：用「外链分享 + 访问密码 + 有效期」控制分享范围，避免泄露私有内容。
 5. **内容迁移**：用「批量导入 Markdown」快速搭建内容物资，用 ZIP 导出做备份或迁移。
+6. **AI 辅助维护**：装上下面介绍的 `minidocs-cli` 技能，让 AI 智能体帮你批量导入、发布与整理文档。
 
+---
+
+## 十一、用 AI 智能体技能（Skills）管理知识库
+
+除了 Console 可视化操作，MiniDocs 还提供了一套遵循 [Agent Skills](https://agentskills.io) 开放标准的技能包 `skills/minidocs-cli`。装上之后，Claude Code、OpenAI Codex、TRAE、OpenCode、GitHub Copilot 等智能体就能直接帮你管理知识库与文档——你只需用自然语言下达任务。
+
+### 1. 技能能做什么
+
+技能基于官方命令行工具 `minidocs-cli`（底层调用 Halo Console REST API），覆盖本教程中的绝大多数操作：
+
+- 知识库：列表、创建、查看详情、修改（描述/标签/成员/公开性）、统计、删除、ZIP 导入导出。
+- 文档：列表、文档树、创建（内联 Markdown 或 `.md` 文件）、修改、发布/取消发布、移动与排序、导出 Markdown、批量导入。
+
+例如对智能体说「把 `docs/` 目录下的 Markdown 导入到『产品手册』知识库并全部发布」，它会自动完成识别、导入与发布。
+
+### 2. 安装步骤
+
+**第一步：安装命令行工具**（要求 Node.js >= 22）
+
+```bash
+npm install -g minidocs-cli
+minidocs --version        # 验证安装，输出 minidocs/2026.x.x
+```
+
+**第二步：安装技能包**：把 `skills/minidocs-cli` 整个目录复制到所用智能体的 skills 目录（目录名需保持 `minidocs-cli`）：
+
+| 智能体 | 用户级（全局） | 项目级 |
+| --- | --- | --- |
+| Claude Code | `~/.claude/skills/` | `.claude/skills/` |
+| OpenAI Codex / GitHub Copilot | `~/.agents/skills/` | `.agents/skills/` |
+| OpenCode | `~/.config/opencode/skills/` | `.opencode/skills/` |
+| TRAE | 技能市场 / 插件目录 | `.trae/skills/` |
+
+```bash
+# 例：Claude Code 项目级（Linux / macOS）
+cp -r skills/minidocs-cli .claude/skills/
+
+# Windows PowerShell（用户级）
+New-Item -ItemType Directory -Path "$HOME\.claude\skills" -Force
+Copy-Item -Path skills\minidocs-cli -Destination "$HOME\.claude\skills\" -Recurse
+```
+
+更多安装位置、软链接方式与格式校验见 [INSTALL.md](../skills/minidocs-cli/INSTALL.md)。
+
+**第三步：配置认证**：CLI 通过 Halo **个人访问令牌（PAT）** 或 Basic 认证访问站点。首次使用时智能体会向你询问站点地址与凭据；也可自行执行：
+
+```bash
+minidocs auth login \
+  --profile my-site \
+  --url https://example.halo.run \
+  --auth-type bearer \
+  --token <个人访问令牌>
+
+minidocs auth profile doctor     # 校验凭据是否可用
+```
+
+> PAT 在 Halo Console「个人资料 → 个人访问令牌」中创建。远程站点请使用 Bearer PAT，Basic 认证仅建议用于本地/受信任站点。凭据保存在系统钥匙串，配置文件中不含明文 token。
+
+### 3. 常用命令示例
+
+```bash
+minidocs kb list --json                                # 列出知识库（JSON 输出便于脚本解析）
+minidocs kb create --display-name "产品手册" --public true
+minidocs doc tree my-kb                                # 查看文档层级（● 已发布 / ○ 草稿）
+minidocs doc import my-kb --files a.md,b.md            # 批量导入 Markdown
+minidocs doc publish my-kb <docName>                   # 发布文档
+minidocs kb export --names my-kb --output kbs.zip      # 导出知识库 ZIP
+```
+
+所有命令均支持 `--json` 与 `--profile <name>`（切换站点）。完整命令与选项见 [commands.md](../skills/minidocs-cli/references/commands.md)，常见错误排查见 [troubleshooting.md](../skills/minidocs-cli/references/troubleshooting.md)。
+
+> **注意事项**：
+>
+> - 删除知识库 / 文档、覆盖导入默认需要二次确认；让智能体在无人值守环境执行时，请明确要求它加 `--force`（导入也可改用 `--strategy skip` 跳过重名）。知识库删除会级联删除其全部文档，不可恢复。
+> - 知识库可用 `metadata.name` 或 `slug` 定位，而文档只能用 `metadata.name`（用 `doc list --json` 获取）。
+
+---
 
 本教程面向日常使用场景编写，更多实现细节可参考：
 
 - [开发文档](./dev.md)
 - [主题 API 文档](./minidocs-theme-api.md)
 - [REST API 文档](./minidocs-rest-api.md)
+- [MiniDocs CLI 技能](../skills/minidocs-cli/SKILL.md)
