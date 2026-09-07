@@ -27,6 +27,7 @@ import {
   IconClose,
   IconBookRead,
   IconInformation,
+  IconList,
   IconUpload,
 } from "@halo-dev/components";
 import { axiosInstance, consoleApiClient } from "@halo-dev/api-client";
@@ -211,6 +212,12 @@ let searchTimer: ReturnType<typeof setTimeout> | null = null;
 
 // 编辑 / 预览（默认预览模式，由 cherry 实例在两个视图模型间切换）
 const previewMode = ref(true);
+
+// 移动端：侧边栏抽屉开关
+const mobileSidebarOpen = ref(false);
+function closeMobileSidebar() {
+  mobileSidebarOpen.value = false;
+}
 
 // 设置抽屉
 const settingsVisible = ref(false);
@@ -764,6 +771,8 @@ async function selectDoc(node: DocTreeNode) {
     previewMode.value = true;
     // 内容已通过 `:content` prop 绑定并由编辑器内部 watch 注入，
     // 这里不再手动 setContent，避免大文档重复全量渲染
+    // 移动端：选中文档后自动收起目录抽屉
+    closeMobileSidebar();
   } finally {
     docLoading.value = false;
   }
@@ -1257,14 +1266,39 @@ onMounted(async () => {
 
 <template>
   <div class="kb-detail">
+    <!-- 移动端顶部栏：返回 + 标题 + 目录（桌面端隐藏） -->
+    <div class="mobile-topbar">
+      <button class="mobile-topbar-btn" title="返回列表" @click="goBack">
+        <IconArrowLeft class="h-4 w-4" />
+      </button>
+      <span class="mobile-topbar-title">{{ kb?.spec.displayName || "知识库详情" }}</span>
+      <button class="mobile-topbar-btn" title="文档目录" @click="mobileSidebarOpen = true">
+        <IconList class="h-4 w-4" />
+      </button>
+    </div>
+
     <div class="main-layout">
       <!-- 左侧边栏 -->
-      <aside class="sidebar" :style="{ width: sidebarWidth + 'px' }">
+      <aside
+        class="sidebar"
+        :class="{ 'mobile-open': mobileSidebarOpen }"
+        :style="{ width: sidebarWidth + 'px' }"
+      >
         <!-- 顶部白色 header -->
         <div class="sidebar-top">
           <button class="back-btn" @click="goBack">
-            <IconArrowLeft class="icon" />
-            <span>返回列表</span>
+            <span class="chip">
+              <svg
+                class="icon"
+                viewBox="0 0 1024 1024"
+                fill="currentColor"
+              >
+                <path
+                  d="M576 815.104l0-71.16799999L763.392 743.93600001a64.512 64.512 0 0 0 66.56-66.56000001l0-397.312a66.56 66.56 0 0 0-51.2-65.02400001 92.672 92.672 0 0 0-16.384 1e-8l-186.368-1e-8 0-70.65599999L769.536 144.384a136.192 136.192 0 0 1 129.024 109.056 138.752 138.752 0 0 1 0 26.112L898.56 681.47200001A132.608 132.608 0 0 1 824.32 801.79199999 116.736 116.736 0 0 1 768 815.104l-192 0z m-147.968-460.8L673.28 354.30399999a18.944 18.944 0 0 1 21.504 14.84800001 31.232 31.232 0 0 1 0 6.144L694.784 586.24a18.432 18.432 0 0 1-20.992 20.48l-245.76 0 0 4.096L428.032 798.72a18.432 18.432 0 0 1-32.256 13.312l-10.752-10.752L250.36799999 665.6l-172.54399999-172.544a18.432 18.432 0 0 1 0-29.184l247.296-246.784 70.656-70.144a18.432 18.432 0 0 1 20.992-5.632 18.432 18.432 0 0 1 11.776 19.456l0 181.76z"
+                />
+              </svg>
+            </span>
+            <span>返回知识库</span>
           </button>
           <div class="sidebar-top-title">
             <h1 class="kb-title">{{ kb?.spec.displayName || "知识库详情" }}</h1>
@@ -1431,6 +1465,13 @@ onMounted(async () => {
         <div class="resize-handle" @pointerdown="startResize" title="拖动调整宽度"></div>
       </aside>
 
+      <!-- 移动端抽屉遮罩 -->
+      <div
+        v-if="mobileSidebarOpen"
+        class="mobile-drawer-mask"
+        @click="closeMobileSidebar"
+      ></div>
+
       <!-- 主内容区 -->
       <main class="editor-area">
         <VLoading v-if="docLoading" />
@@ -1528,9 +1569,9 @@ onMounted(async () => {
             <div class="status-bar-right">
               <span class="stat-item">字数 {{ wordCount }}</span>
               <span class="stat-item">行数 {{ lineCount }}</span>
-              <span class="stat-item">作者 {{ docAuthor }}</span>
-              <span class="stat-item">创建时间 {{ createdTime }}</span>
-              <span class="stat-item">更新时间 {{ updateTime }}</span>
+              <span class="stat-item hide-mobile">作者 {{ docAuthor }}</span>
+              <span class="stat-item hide-mobile">创建时间 {{ createdTime }}</span>
+              <span class="stat-item hide-mobile">更新时间 {{ updateTime }}</span>
               <button class="status-btn" title="回到顶部" @click="scrollEditorToTop">
                 <IconArrowUpLine class="h-3.5 w-3.5" />
                 <span>回到顶部</span>
@@ -1849,25 +1890,46 @@ onMounted(async () => {
 .back-btn {
   display: inline-flex;
   align-items: center;
-  gap: 0.25rem;
+  gap: 0.375rem;
   padding: 0.25rem 0.375rem;
   font-size: 0.8125rem;
-  color: #595959;
+  font-weight: 500;
+  color: #475569;
   background: transparent;
   border: none;
-  border-radius: 0.375rem;
+  border-radius: 8px;
   cursor: pointer;
+  line-height: 1;
   transition: all 0.2s ease;
 }
 
+.back-btn .chip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.2s ease;
+}
+
 .back-btn:hover {
-  color: #262626;
-  background: #f5f5f5;
+  color: #2563eb;
+  background: #eff6ff;
+  transform: translateX(-2px);
+}
+
+.back-btn:hover .chip {
+  transform: translateX(-1px);
+}
+
+.back-btn:focus-visible {
+  outline: 2px solid #93c5fd;
+  outline-offset: 1px;
 }
 
 .back-btn .icon {
-  width: 1rem;
-  height: 1rem;
+  display: block;
+  flex: none;
+  width: 0.8125rem;
+  height: 0.8125rem;
 }
 
 .sidebar-top-title {
@@ -2966,5 +3028,170 @@ onMounted(async () => {
   color: #bfbfbf;
   margin: 0;
   padding: 0.375rem 0;
+}
+
+/* ========== 移动端适配（≤767px） ========== */
+/* 移动端顶部栏：默认隐藏，移动端显示 */
+.mobile-topbar {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  .kb-detail {
+    height: 100vh;
+    height: 100dvh;
+  }
+
+  /* 顶部栏：返回 + 标题 + 目录 */
+  .mobile-topbar {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    height: 3rem;
+    padding: 0 0.75rem;
+    background: #ffffff;
+    border-bottom: 1px solid #f0f0f0;
+    z-index: 10;
+  }
+
+  .mobile-topbar-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    color: #595959;
+    background: transparent;
+    border: none;
+    border-radius: 0.5rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .mobile-topbar-btn:hover {
+    color: #262626;
+    background: #f5f5f5;
+  }
+
+  .mobile-topbar-title {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 1rem;
+    font-weight: 600;
+    color: #262626;
+    text-align: center;
+  }
+
+  .main-layout {
+    position: relative;
+  }
+
+  /* 侧边栏：转为左侧抽屉 */
+  .sidebar {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: min(86vw, 320px) !important;
+    z-index: 1200;
+    transform: translateX(-105%);
+    transition: transform 0.25s ease;
+    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.18);
+    border-right: none;
+  }
+
+  .sidebar.mobile-open {
+    transform: translateX(0);
+  }
+
+  .resize-handle {
+    display: none;
+  }
+
+  .mobile-drawer-mask {
+    position: fixed;
+    inset: 0;
+    z-index: 1190;
+    background: rgba(0, 0, 0, 0.4);
+  }
+
+  /* 工具栏：切换项固定，操作按钮横向滚动 */
+  .doc-toolbar {
+    flex-wrap: nowrap;
+    padding: 0.5rem 0.75rem;
+    gap: 0.5rem;
+  }
+
+  .toolbar-left {
+    flex-shrink: 0;
+  }
+
+  .toolbar-actions {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    min-width: 0;
+    padding-bottom: 0.125rem;
+  }
+
+  .toolbar-actions::-webkit-scrollbar {
+    display: none;
+  }
+
+  .toolbar-actions .btn {
+    flex-shrink: 0;
+  }
+
+  /* 状态栏：仅保留字数/行数/回到顶部 */
+  .status-bar {
+    padding: 0.5rem 0.75rem;
+    gap: 0.75rem;
+  }
+
+  .status-bar-right {
+    gap: 0.75rem;
+  }
+
+  .stat-item.hide-mobile {
+    display: none;
+  }
+
+  /* 编辑器区域 */
+  .editor-wrapper {
+    padding: 0;
+  }
+
+  .editor-container {
+    min-height: 0;
+  }
+
+  /* 弹窗宽度适配 */
+  :deep(.modal-content) {
+    width: calc(100vw - 1.5rem) !important;
+    max-height: 85vh;
+  }
+
+  /* 设置抽屉占满宽度 */
+  .drawer-panel {
+    width: 100vw;
+    max-width: 100vw;
+  }
+}
+
+/* 桌面端：移动端顶部栏保持隐藏 */
+@media (min-width: 768px) {
+  .mobile-topbar {
+    display: none !important;
+  }
+
+  .mobile-drawer-mask {
+    display: none !important;
+  }
 }
 </style>

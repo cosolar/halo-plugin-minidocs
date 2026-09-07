@@ -169,8 +169,8 @@ Console API 位于 `console.api.minidocs.halo.run/v1alpha1`，供 Console 前端
 
 | 端点 | 方法 | 说明 |
 | --- | --- | --- |
-| `/apis/console.api.minidocs.halo.run/v1alpha1/knowledgebases/stats` | `GET` | 聚合当前用户**可访问**的知识库/文档统计（总数、公开/私有数、文档数、月度环比 `kbGrowth`/`docGrowth`、公开占比 `publicRatio`）；仅统计当前用户有权限访问的资源，避免向普通用户泄露私有库数量 |
-| `/apis/console.api.minidocs.halo.run/v1alpha1/knowledgebases/settings` | `GET` | 返回 `{ "codeBlockTheme": "…" }`，供 Markdown 编辑器读取代码块高亮主题（不依赖 Halo 超管专属的 `/json-config` 接口） |
+| `/apis/console.api.minidocs.halo.run/v1alpha1/knowledgebases/stats` | `GET` | 聚合当前用户**可访问**的知识库/文档统计（总数、公开/私有数、已分享数 `shareCount`、文档数、月度环比 `kbGrowth`/`docGrowth`、公开占比 `publicRatio`）；仅统计当前用户有权限访问的资源，避免向普通用户泄露私有库数量 |
+| `/apis/console.api.minidocs.halo.run/v1alpha1/knowledgebases/settings` | `GET` | 返回 `{ "codeBlockTheme": "…", "showStats": true }`，供 Markdown 编辑器读取代码块高亮主题，并返回控制台统计栏总开关 `showStats`（对应基础设置项「控制台知识库管理页显示统计栏」，默认 `true`；不依赖 Halo 超管专属的 `/json-config` 接口） |
 | `/apis/console.api.minidocs.halo.run/v1alpha1/knowledgebases` | `GET` | 分页列出知识库；支持 `keyword`、`publicVisible`、`page`、`size`、`sortBy` |
 | `/apis/console.api.minidocs.halo.run/v1alpha1/knowledgebases/{name}` | `GET` | 获取单个知识库（含私有） |
 | `/apis/console.api.minidocs.halo.run/v1alpha1/knowledgebases` | `POST` | 创建知识库 |

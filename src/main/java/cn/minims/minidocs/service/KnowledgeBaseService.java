@@ -770,6 +770,12 @@ public class KnowledgeBaseService {
             .filter(kb -> Boolean.TRUE.equals(kb.getSpec().getPublicVisible()))
             .count();
         int privateCount = total - publicCount;
+        int shareCount = (int) kbs.stream()
+            .filter(kb -> {
+                var state = shareState(kb);
+                return state.enabled() && !state.expired();
+            })
+            .count();
         int docCount = docs.size();
 
         int kbGrowth = (int) kbs.stream()
@@ -797,6 +803,7 @@ public class KnowledgeBaseService {
             .total(total)
             .publicCount(publicCount)
             .privateCount(privateCount)
+            .shareCount(shareCount)
             .docCount(docCount)
             .kbGrowth(kbGrowth)
             .docGrowth(docGrowth)

@@ -866,22 +866,22 @@ defineExpose({
   width: 280px;
   background: #ffffff;
 }
-/* 头部：主题蓝渐变 */
+/* 头部：浅蓝渐变，与编辑器标题竖条/引用同色系，弱化浓重色块 */
 .markdown-editor-wrapper :deep(.cherry-flex-toc.cherry-flex-toc__full .cherry-toc-head) {
-  border-bottom: none;
-  padding: 8px 12px;
-  background: linear-gradient(90deg, #4c8dff, #6ba5ff);
+  border-bottom: 1px solid #e3e8ef;
+  padding: 5px 12px;
+  background: linear-gradient(180deg, #f5f9ff, #eaf2ff);
 }
 .markdown-editor-wrapper :deep(.cherry-flex-toc.cherry-flex-toc__full .cherry-toc-head .cherry-toc-title) {
-  color: #ffffff;
-  font-size: 14px;
+  color: #2f6fed;
+  font-size: 13px;
   font-weight: 600;
 }
 .markdown-editor-wrapper :deep(.cherry-flex-toc.cherry-flex-toc__full .cherry-toc-head i) {
-  color: rgba(255, 255, 255, 0.85);
+  color: #4c8dff;
 }
 .markdown-editor-wrapper :deep(.cherry-flex-toc.cherry-flex-toc__full .cherry-toc-head i:hover) {
-  color: #ffffff;
+  color: #1d4ed8;
 }
 /* 列表滚动条 */
 .markdown-editor-wrapper :deep(.cherry-flex-toc.cherry-flex-toc__full .cherry-toc-list) {
@@ -895,26 +895,26 @@ defineExpose({
   background: #c9d6ea;
   border-radius: 3px;
 }
-/* 条目：去掉粗橙条，改圆角蓝条 + 悬停/当前项淡蓝底 */
+/* 条目：行高收敛、紧凑间距、全圆角，高亮与编辑器链接/表格 hover 一致 */
 .markdown-editor-wrapper :deep(.cherry-flex-toc.cherry-flex-toc__full .cherry-toc-list .cherry-toc-one-a) {
   position: relative; /* 供层级连线伪元素定位 */
   box-sizing: border-box;
-  height: 32px;
-  line-height: 32px;
-  margin: 2px 8px;
+  height: 30px;
+  line-height: 30px;
+  margin: 1px 6px;
   width: auto;
   border-left: 3px solid transparent;
-  border-radius: 0 6px 6px 0;
+  border-radius: 4px;
   padding-left: 16px;
-  color: #2c3e50;
+  color: #3a4a5f;
   font-size: 13px;
-  transition: all 0.2s;
+  transition: all 0.15s ease;
 }
 .markdown-editor-wrapper :deep(.cherry-flex-toc.cherry-flex-toc__full .cherry-toc-list .cherry-toc-one-a:hover),
 .markdown-editor-wrapper :deep(.cherry-flex-toc.cherry-flex-toc__full .cherry-toc-list .cherry-toc-one-a.current) {
   border-left-color: #4c8dff;
   color: #2f6fed;
-  background: #eef4ff;
+  background: #f0f6ff;
 }
 /* 层级缩进 16px 均匀递进；字体按层级递减字号、颜色渐浅，一级最突出 */
 .markdown-editor-wrapper :deep(.cherry-flex-toc.cherry-flex-toc__full .cherry-toc-list .cherry-toc-one-a__1) {

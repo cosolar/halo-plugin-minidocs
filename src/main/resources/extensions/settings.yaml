@@ -15,6 +15,11 @@ spec:
           name: allowDocExport
           label: 允许导出文档（Markdown）
           value: true
+        - $formkit: switch
+          name: showStats
+          label: 知识库管理页显示统计栏
+          value: true
+          help: 关闭后所有用户的控制台知识库管理页将不再显示统计栏
         - $formkit: select
           name: codeBlockTheme
           label: 代码块高亮主题

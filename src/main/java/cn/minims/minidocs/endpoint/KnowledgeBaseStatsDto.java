@@ -20,6 +20,9 @@ public class KnowledgeBaseStatsDto {
     @Schema(description = "私有知识库数")
     private Integer privateCount;
 
+    @Schema(description = "已分享知识库数（外链有效且未过期）")
+    private Integer shareCount;
+
     @Schema(description = "文档总数")
     private Integer docCount;
 

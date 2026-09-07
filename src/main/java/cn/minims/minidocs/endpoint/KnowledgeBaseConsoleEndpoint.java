@@ -75,12 +75,14 @@ public class KnowledgeBaseConsoleEndpoint implements CustomEndpoint {
     }
 
     private Mono<ServerResponse> settings(ServerRequest request) {
-        // 供 Markdown 编辑器读取代码块高亮主题；不依赖 Halo 超管专属的
-        // /apis/api.console.halo.run/.../json-config 接口
+        // 供 Markdown 编辑器读取代码块高亮主题，以及控制台统计栏总开关；
+        // 不依赖 Halo 超管专属的 /apis/api.console.halo.run/.../json-config 接口
         return settingFetcher.fetch("basic", BasicSetting.class)
-            .map(BasicSetting::codeBlockThemeOrDefault)
-            .defaultIfEmpty("default")
-            .flatMap(theme -> ServerResponse.ok().bodyValue(Map.of("codeBlockTheme", theme)));
+            .map(setting -> Map.of(
+                "codeBlockTheme", setting.codeBlockThemeOrDefault(),
+                "showStats", setting.statsVisibleEnabled()))
+            .defaultIfEmpty(Map.of("codeBlockTheme", "default", "showStats", true))
+            .flatMap(body -> ServerResponse.ok().bodyValue(body));
     }
 
     private Mono<ServerResponse> listKnowledgeBases(ServerRequest request) {

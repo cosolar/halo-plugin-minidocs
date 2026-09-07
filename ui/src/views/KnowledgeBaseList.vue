@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from "vue";
 import { useRouter } from "vue-router";
 import {
   Dialog,
   Toast,
   VButton,
   VCard,
+  VDropdown,
+  VDropdownItem,
   VEmpty,
   VLoading,
   VModal,
@@ -13,7 +15,6 @@ import {
   VSpace,
   VSwitch,
   VTag,
-  IconBookRead,
   IconRiPencilFill,
   IconDeleteBin,
   IconAddCircle,
@@ -38,6 +39,7 @@ interface Stats {
   total: number;
   publicCount: number;
   privateCount: number;
+  shareCount: number;
   docCount: number;
   kbGrowth: number;
   docGrowth: number;
@@ -66,6 +68,8 @@ interface KnowledgeBase {
     shareToken?: string;
     sharePassword?: string;
     shareExpiresAt?: string;
+    accessCount?: number;
+    likeCount?: number;
   };
   status?: {
     docCount?: number;
@@ -87,9 +91,28 @@ const size = ref(10);
 const keyword = ref("");
 const publicVisible = ref<boolean | undefined>(undefined);
 const viewMode = ref<"grid" | "list">("grid");
+const isMobile = ref(window.matchMedia("(max-width: 767px)").matches);
+function onResize() {
+  isMobile.value = window.matchMedia("(max-width: 767px)").matches;
+}
 const sortBy = ref<"updateTime" | "createTime" | "name" | "docCount" | "priority">("updateTime");
 const stats = ref<Stats | null>(null);
 const statsLoading = ref(false);
+// 统计栏显示/隐藏：localStorage 记忆用户选择；statsGlobalEnabled 为插件设置里的总开关
+const statsVisible = ref(localStorage.getItem("minidocs_stats_visible") !== "0");
+const statsGlobalEnabled = ref(true);
+function toggleStatsVisible() {
+  statsVisible.value = !statsVisible.value;
+  localStorage.setItem("minidocs_stats_visible", statsVisible.value ? "1" : "0");
+}
+async function loadStatsSettings() {
+  try {
+    const { data } = await axiosInstance.get(`${API_PREFIX}/knowledgebases/settings`);
+    statsGlobalEnabled.value = data?.showStats !== false;
+  } catch {
+    // 读取失败时保持默认显示
+  }
+}
 
 const modalVisible = ref(false);
 const saving = ref(false);
@@ -720,8 +743,14 @@ function batchRemove() {
 }
 
 onMounted(() => {
+  loadStatsSettings();
   loadStats();
   load();
+  window.addEventListener("resize", onResize);
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener("resize", onResize);
 });
 </script>
 
@@ -737,7 +766,7 @@ onMounted(() => {
           <template #icon>
             <IconUpload class="h-4 w-4" />
           </template>
-          导入知识库
+          导入
         </VButton>
         <input
           ref="kbImportInput"
@@ -750,7 +779,7 @@ onMounted(() => {
           <template #icon>
             <IconAddCircle class="h-4 w-4" />
           </template>
-          新建知识库
+          新建
         </VButton>
       </template>
     </VPageHeader>
@@ -758,7 +787,18 @@ onMounted(() => {
     <!-- 页面主体：统计面板 + 内容面板 -->
     <div class="knowledge-base-body">
       <!-- 统计区面板 -->
-      <div class="stats-panel">
+      <div v-if="statsGlobalEnabled && statsVisible" class="stats-panel">
+        <div class="stats-panel-header">
+          <span class="stats-panel-title">数据概览</span>
+          <button
+            class="stats-toggle-btn"
+            title="隐藏统计栏"
+            aria-label="隐藏统计栏"
+            @click="toggleStatsVisible"
+          >
+            <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
         <div v-if="stats" class="stats-grid">
           <VCard :body-class="['!p-0']" class="stat-card">
             <div class="stat-card-inner">
@@ -802,6 +842,17 @@ onMounted(() => {
           <VCard :body-class="['!p-0']" class="stat-card">
             <div class="stat-card-inner">
               <div class="stat-main">
+                <span class="stat-label">已分享</span>
+                <span class="stat-value">{{ stats.shareCount }}</span>
+              </div>
+              <span class="stat-trend">
+                外链可访问
+              </span>
+            </div>
+          </VCard>
+          <VCard :body-class="['!p-0']" class="stat-card">
+            <div class="stat-card-inner">
+              <div class="stat-main">
                 <span class="stat-label">文档总数</span>
                 <span class="stat-value">{{ stats.docCount }}</span>
               </div>
@@ -816,6 +867,14 @@ onMounted(() => {
             </div>
           </VCard>
         </div>
+      </div>
+
+      <!-- 统计栏隐藏时的恢复条（总开关关闭时不显示） -->
+      <div v-else-if="statsGlobalEnabled" class="stats-hidden-bar">
+        <button class="stats-toggle-btn stats-toggle-restore" @click="toggleStatsVisible">
+          <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          <span>显示统计栏</span>
+        </button>
       </div>
 
       <!-- 内容面板：批量操作栏 + 工具栏 + 可滚动列表 + 分页 -->
@@ -942,8 +1001,8 @@ onMounted(() => {
         </VEmpty>
       </div>
 
-      <!-- 网格视图 -->
-    <div v-else-if="viewMode === 'grid'" class="kb-grid">
+      <!-- 网格视图（移动端强制列表模式，不渲染网格） -->
+    <div v-else-if="viewMode === 'grid' && !isMobile" class="kb-grid">
       <VCard
         v-for="kb in kbs"
         :key="kb.metadata.name"
@@ -961,20 +1020,17 @@ onMounted(() => {
               @change="toggleSelect(kb)"
             />
             <div class="kb-card-info">
-              <div class="kb-avatar" :class="[getStatusTheme(kb).bg, getStatusTheme(kb).text]">
-                <IconBookRead class="h-6 w-6" />
-              </div>
+            <svg
+              class="h-6 w-6 flex-shrink-0"
+              :class="getStatusTheme(kb).text"
+              viewBox="0 0 1024 1024"
+              fill="currentColor"
+              aria-hidden="true"
+            >
+              <path d="M136.533333 170.666667a102.4 102.4 0 0 1 102.4-102.4h68.266667a238.7968 238.7968 0 0 1 204.8 115.780266A238.7968 238.7968 0 0 1 716.8 68.266667h68.266667a102.4 102.4 0 0 1 102.4 102.4v102.4a102.4 102.4 0 0 1 102.4 102.4v409.6a170.666667 170.666667 0 0 1-170.666667 170.666666H204.8a170.666667 170.666667 0 0 1-170.666667-170.666666V375.466667a102.4 102.4 0 0 1 102.4-102.4V170.666667z m0 170.666666a34.133333 34.133333 0 0 0-34.133333 34.133334v409.6a102.4 102.4 0 0 0 102.4 102.4h614.4a102.4 102.4 0 0 0 102.4-102.4V375.466667a34.133333 34.133333 0 0 0-34.133333-34.133334v409.6a102.4 102.4 0 0 1-102.4 102.4H238.933333a102.4 102.4 0 0 1-102.4-102.4V341.333333z m170.666667-204.8H238.933333a34.133333 34.133333 0 0 0-34.133333 34.133334v580.266666a34.133333 34.133333 0 0 0 34.133333 34.133334h238.933334V307.2a170.666667 170.666667 0 0 0-170.666667-170.666667z m477.866667 648.533334a34.133333 34.133333 0 0 0 34.133333-34.133334V170.666667a34.133333 34.133333 0 0 0-34.133333-34.133334h-68.266667a170.666667 170.666667 0 0 0-170.666667 170.666667v477.866667h238.933334z"></path>
+            </svg>
               <div class="kb-card-titles">
-                <h3 class="kb-card-title">{{ kb.spec.displayName }}</h3>
-                <div v-if="kb.spec.tags?.length" class="kb-tag-list kb-tag-list-inline">
-                  <span
-                    v-for="tag in kb.spec.tags.slice(0, 4)"
-                    :key="tag"
-                    class="kb-tag-chip"
-                  >
-                    {{ tag }}
-                  </span>
-                </div>
+                <h3 class="kb-card-title" :title="kb.spec.displayName">{{ kb.spec.displayName }}</h3>
               </div>
             </div>
             <VTag
@@ -1007,23 +1063,13 @@ onMounted(() => {
         </template>
 
         <div class="kb-card-body">
-          <p class="kb-card-desc">
+          <p class="kb-card-desc" :title="kb.spec.description || '暂无描述'">
             {{ kb.spec.description || '暂无描述' }}
           </p>
           <div class="kb-card-meta">
-            <span class="kb-meta-left">
-              <span class="kb-meta-item" title="文档数">
-                <IconPages class="h-3.5 w-3.5" />
-                {{ kb.status?.docCount ?? 0 }}
-              </span>
-              <span class="kb-meta-item" :title="'访问量 ' + (kb.spec?.accessCount ?? 0)">
-                <IconEye class="h-3.5 w-3.5" />
-                {{ kb.spec?.accessCount ?? 0 }}
-              </span>
-              <span class="kb-meta-item" :title="'点赞量 ' + (kb.spec?.likeCount ?? 0)">
-                <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
-                {{ kb.spec?.likeCount ?? 0 }}
-              </span>
+            <span class="kb-meta-item" title="文档数">
+              <IconPages class="h-3.5 w-3.5" />
+              {{ kb.status?.docCount ?? 0 }} 篇文档
             </span>
             <span
               class="kb-meta-item"
@@ -1049,40 +1095,73 @@ onMounted(() => {
               进入
             </VButton>
             <div class="kb-card-actions">
-              <button
-                class="icon-btn icon-btn-share"
-                :class="{ 'is-on': isKbShared(kb) }"
-                :title="isKbShared(kb) ? '已分享，点击管理外链' : '分享'"
-                aria-label="分享"
-                @click.stop="openShare(kb)"
-              >
-                <span v-if="isKbShared(kb)" class="share-on-dot"></span>
-                <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
-              </button>
-              <button
-                class="icon-btn icon-btn-export"
-                title="导出"
-                aria-label="导出"
-                @click.stop="exportOne(kb)"
-              >
-                <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v10"/><polyline points="7 10 12 15 17 10"/><path d="M4 19h16"/></svg>
-              </button>
-              <button
-                class="icon-btn icon-btn-edit"
-                title="编辑"
-                aria-label="编辑"
-                @click.stop="openEdit(kb)"
-              >
-                <IconRiPencilFill class="h-4 w-4" />
-              </button>
-              <button
-                class="icon-btn icon-btn-delete"
-                title="删除"
-                aria-label="删除"
-                @click.stop="remove(kb)"
-              >
-                <IconDeleteBin class="h-4 w-4" />
-              </button>
+              <div class="kb-actions-inline">
+                <button
+                  class="icon-btn icon-btn-share"
+                  :class="{ 'is-on': isKbShared(kb) }"
+                  :title="isKbShared(kb) ? '已分享，点击管理外链' : '分享'"
+                  aria-label="分享"
+                  @click.stop="openShare(kb)"
+                >
+                  <span v-if="isKbShared(kb)" class="share-on-dot"></span>
+                  <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+                </button>
+                <button
+                  class="icon-btn icon-btn-export"
+                  title="导出"
+                  aria-label="导出"
+                  @click.stop="exportOne(kb)"
+                >
+                  <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v10"/><polyline points="7 10 12 15 17 10"/><path d="M4 19h16"/></svg>
+                </button>
+                <button
+                  class="icon-btn icon-btn-edit"
+                  title="编辑"
+                  aria-label="编辑"
+                  @click.stop="openEdit(kb)"
+                >
+                  <IconRiPencilFill class="h-4 w-4" />
+                </button>
+                <button
+                  class="icon-btn icon-btn-delete"
+                  title="删除"
+                  aria-label="删除"
+                  @click.stop="remove(kb)"
+                >
+                  <IconDeleteBin class="h-4 w-4" />
+                </button>
+              </div>
+              <VDropdown class="kb-more-dropdown">
+                <button class="icon-btn kb-more-btn" aria-label="更多操作" @click.stop>
+                  <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg>
+                </button>
+                <template #popper>
+                  <VDropdownItem @click="openShare(kb)">
+                    <template #prefix-icon>
+                      <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+                    </template>
+                    {{ isKbShared(kb) ? '管理分享' : '分享' }}
+                  </VDropdownItem>
+                <VDropdownItem @click="exportOne(kb)">
+                  <template #prefix-icon>
+                    <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v10"/><polyline points="7 10 12 15 17 10"/><path d="M4 19h16"/></svg>
+                  </template>
+                  导出
+                </VDropdownItem>
+                <VDropdownItem @click="openEdit(kb)">
+                  <template #prefix-icon>
+                    <IconRiPencilFill class="h-3.5 w-3.5" />
+                  </template>
+                  编辑
+                </VDropdownItem>
+                <VDropdownItem type="danger" @click="remove(kb)">
+                  <template #prefix-icon>
+                    <IconDeleteBin class="h-3.5 w-3.5" />
+                  </template>
+                  删除
+                </VDropdownItem>
+                </template>
+              </VDropdown>
             </div>
           </div>
         </template>
@@ -1091,50 +1170,55 @@ onMounted(() => {
 
     <!-- 列表视图 -->
     <div v-else class="kb-list">
-      <VCard
+      <div
         v-for="kb in kbs"
         :key="kb.metadata.name"
-        :body-class="['!p-0']"
-        class="kb-card kb-card-list"
+        class="kb-list-row"
         @click="goDetail(kb.metadata.name)"
       >
-        <template #header>
-          <div class="kb-list-row">
-            <input
-              type="checkbox"
-              class="kb-checkbox"
-              :checked="isSelected(kb.metadata.name)"
-              @click.stop
-              @change="toggleSelect(kb)"
-            />
-            <div class="kb-avatar" :class="[getStatusTheme(kb).bg, getStatusTheme(kb).text]">
-              <IconBookRead class="h-5 w-5" />
-            </div>
-            <div class="kb-list-info">
-              <div class="kb-list-title-row">
-                <h3 class="kb-card-title">{{ kb.spec.displayName }}</h3>
-                <VTag v-if="kb.spec.members?.length" size="sm" class="kb-status-inline kb-status-team">团队</VTag>
-                <VTag v-else-if="kb.spec.publicVisible" size="sm" class="kb-status-inline kb-status-public">公开</VTag>
-                <VTag v-else size="sm" class="kb-status-inline kb-status-private">私有</VTag>
-              </div>
-              <p class="kb-card-desc">
-                {{ kb.spec.description || '暂无描述' }}
-              </p>
-            </div>
-            <div class="kb-list-meta">
-              <span class="kb-meta-item">
-                <IconPages class="h-3.5 w-3.5" />
-                {{ kb.status?.docCount ?? 0 }} 篇文档
-              </span>
-              <span
-                class="kb-meta-item"
-                :title="'创建于 ' + formatTime(kb.metadata.creationTimestamp)"
-              >
-                创建于
-                {{ formatTime(kb.metadata.creationTimestamp, 'MM/DD HH:mm') }}
-              </span>
-            </div>
-            <div class="kb-list-actions">
+        <input
+          type="checkbox"
+          class="kb-checkbox"
+          :checked="isSelected(kb.metadata.name)"
+          @click.stop
+          @change="toggleSelect(kb)"
+        />
+        <svg
+          class="h-4 w-4 flex-shrink-0"
+          :class="getStatusTheme(kb).text"
+          viewBox="0 0 1024 1024"
+          fill="currentColor"
+          aria-hidden="true"
+        >
+          <path d="M136.533333 170.666667a102.4 102.4 0 0 1 102.4-102.4h68.266667a238.7968 238.7968 0 0 1 204.8 115.780266A238.7968 238.7968 0 0 1 716.8 68.266667h68.266667a102.4 102.4 0 0 1 102.4 102.4v102.4a102.4 102.4 0 0 1 102.4 102.4v409.6a170.666667 170.666667 0 0 1-170.666667 170.666666H204.8a170.666667 170.666667 0 0 1-170.666667-170.666666V375.466667a102.4 102.4 0 0 1 102.4-102.4V170.666667z m0 170.666666a34.133333 34.133333 0 0 0-34.133333 34.133334v409.6a102.4 102.4 0 0 0 102.4 102.4h614.4a102.4 102.4 0 0 0 102.4-102.4V375.466667a34.133333 34.133333 0 0 0-34.133333-34.133334v409.6a102.4 102.4 0 0 1-102.4 102.4H238.933333a102.4 102.4 0 0 1-102.4-102.4V341.333333z m170.666667-204.8H238.933333a34.133333 34.133333 0 0 0-34.133333 34.133334v580.266666a34.133333 34.133333 0 0 0 34.133333 34.133334h238.933334V307.2a170.666667 170.666667 0 0 0-170.666667-170.666667z m477.866667 648.533334a34.133333 34.133333 0 0 0 34.133333-34.133334V170.666667a34.133333 34.133333 0 0 0-34.133333-34.133334h-68.266667a170.666667 170.666667 0 0 0-170.666667 170.666667v477.866667h238.933334z"></path>
+        </svg>
+        <div class="kb-list-info">
+          <div class="kb-list-title-row">
+            <h3 class="kb-card-title" :title="kb.spec.displayName">{{ kb.spec.displayName }}</h3>
+            <VTag v-if="kb.spec.members?.length" size="sm" class="kb-status-inline kb-status-team">团队</VTag>
+            <VTag v-else-if="kb.spec.publicVisible" size="sm" class="kb-status-inline kb-status-public">公开</VTag>
+            <VTag v-else size="sm" class="kb-status-inline kb-status-private">私有</VTag>
+          </div>
+          <p class="kb-list-desc">
+            {{ kb.spec.description || '暂无描述' }}
+          </p>
+        </div>
+        <div class="kb-list-side">
+          <div class="kb-list-meta">
+            <span class="kb-meta-item">
+              <IconPages class="h-3.5 w-3.5" />
+              {{ kb.status?.docCount ?? 0 }} 篇文档
+            </span>
+            <span
+              class="kb-meta-item"
+              :title="kb.spec?.updateTime ? '更新于 ' + formatTime(kb.spec.updateTime) : '创建于 ' + formatTime(kb.metadata.creationTimestamp)"
+            >
+              更新于
+              {{ formatRelativeTime(kb.spec?.updateTime || kb.metadata.creationTimestamp) }}
+            </span>
+          </div>
+          <div class="kb-list-actions">
+            <div class="kb-actions-inline">
               <button
                 class="icon-btn icon-btn-share"
                 :class="{ 'is-on': isKbShared(kb) }"
@@ -1170,9 +1254,40 @@ onMounted(() => {
                 <IconDeleteBin class="h-4 w-4" />
               </button>
             </div>
+            <VDropdown class="kb-more-dropdown">
+              <button class="icon-btn kb-more-btn" aria-label="更多操作" @click.stop>
+                <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg>
+              </button>
+              <template #popper>
+                <VDropdownItem @click="openShare(kb)">
+                  <template #prefix-icon>
+                    <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+                  </template>
+                  {{ isKbShared(kb) ? '管理分享' : '分享' }}
+                </VDropdownItem>
+              <VDropdownItem @click="exportOne(kb)">
+                <template #prefix-icon>
+                  <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v10"/><polyline points="7 10 12 15 17 10"/><path d="M4 19h16"/></svg>
+                </template>
+                导出
+              </VDropdownItem>
+              <VDropdownItem @click="openEdit(kb)">
+                <template #prefix-icon>
+                  <IconRiPencilFill class="h-3.5 w-3.5" />
+                </template>
+                编辑
+              </VDropdownItem>
+              <VDropdownItem type="danger" @click="remove(kb)">
+                <template #prefix-icon>
+                  <IconDeleteBin class="h-3.5 w-3.5" />
+                </template>
+                删除
+              </VDropdownItem>
+              </template>
+            </VDropdown>
           </div>
-        </template>
-      </VCard>
+        </div>
+      </div>
     </div>
 
     <!-- 关闭滚动内容区 -->
@@ -1484,15 +1599,13 @@ onMounted(() => {
   background: #f9fafb;
 }
 
-/* 主体内容区：标题下方剩余空间，flex 列布局 */
+/* 主体内容区：标题下方剩余空间，flex 列布局，铺满可用宽度 */
 .knowledge-base-body {
   display: flex;
   flex-direction: column;
   flex: 1 1 auto;
   min-height: 0;
   width: 100%;
-  max-width: 1560px;
-  margin: 0 auto;
   padding: 1rem;
   gap: 1rem;
 }
@@ -1503,8 +1616,61 @@ onMounted(() => {
   background: #ffffff;
   border: 1px solid #e5e7eb;
   border-radius: 12px;
-  padding: 1.25rem;
+  padding: 0.75rem 1rem 1rem;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.stats-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.stats-panel-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #374151;
+}
+
+.stats-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: #f3f4f6;
+  color: #6b7280;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  padding: 0;
+}
+
+.stats-toggle-btn:hover {
+  background: #e5e7eb;
+  color: #374151;
+}
+
+.stats-toggle-restore {
+  width: auto;
+  padding: 0 0.75rem;
+  font-size: 0.8125rem;
+  gap: 0.375rem;
+}
+
+/* 统计栏隐藏时的恢复条 */
+.stats-hidden-bar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  background: #ffffff;
+  border: 1px dashed #e5e7eb;
+  border-radius: 10px;
+  padding: 0.375rem 0.75rem;
 }
 
 /* 内容面板：批量栏 + 工具栏 + 可滚动列表 + 分页 */
@@ -1591,7 +1757,7 @@ onMounted(() => {
 
 @media (min-width: 1024px) {
   .stats-grid {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
   }
 }
 
@@ -1611,25 +1777,25 @@ onMounted(() => {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
-  gap: 0.75rem;
-  padding: 1.25rem;
-  min-height: 100px;
+  gap: 0.625rem;
+  padding: 0.75rem 0.875rem;
+  min-height: 76px;
 }
 
 .stat-main {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.25rem;
 }
 
 .stat-label {
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
   color: #6b7280;
   font-weight: 500;
 }
 
 .stat-value {
-  font-size: 2rem;
+  font-size: 1.625rem;
   line-height: 1;
   font-weight: 700;
   color: #111827;
@@ -1859,15 +2025,15 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   height: 100%;
-  border: 1px solid #e5e7eb;
+  border: 1px solid #eef0f2;
   border-radius: 12px;
   background: #ffffff;
   transition: all 0.2s ease;
 }
 
 .kb-card-grid:hover {
-  border-color: #d1d5db;
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.06);
+  border-color: #e2e5e8;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.05);
 }
 
 .kb-card-grid :deep(.card-body) {
@@ -1880,7 +2046,7 @@ onMounted(() => {
   display: flex;
   align-items: flex-start;
   gap: 0.75rem;
-  padding: 1rem 1rem 0.5rem;
+  padding: 0.875rem 1rem 0.5rem;
 }
 
 .kb-card-info {
@@ -1892,16 +2058,6 @@ onMounted(() => {
   padding-right: 4.5rem;
 }
 
-.kb-avatar {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 2.75rem;
-  height: 2.75rem;
-  flex-shrink: 0;
-  border-radius: 0.5rem;
-}
-
 .kb-card-titles {
   min-width: 0;
   flex: 1;
@@ -1911,7 +2067,7 @@ onMounted(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 1rem;
+  font-size: 0.9375rem;
   font-weight: 600;
   color: #111827;
   line-height: 1.4;
@@ -1937,7 +2093,7 @@ onMounted(() => {
   display: inline-flex;
   align-items: center;
   border-radius: 0 12px 0 12px !important;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 
 .kb-status-inline {
@@ -1970,30 +2126,16 @@ onMounted(() => {
   border-color: #2563eb !important;
 }
 
-.kb-meta-left {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.75rem;
-  min-width: 0;
-}
-
 .kb-card-body {
   flex: 1 1 auto;
   display: flex;
   flex-direction: column;
   gap: 0.625rem;
-  padding: 0.5rem 1rem 1rem;
+  padding: 0.5rem 1rem 0.5rem;
 }
 
 .kb-card-body .kb-card-desc {
   margin: 0;
-}
-
-.kb-tag-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  min-height: 1.5rem;
 }
 
 .kb-card-meta {
@@ -2002,8 +2144,9 @@ onMounted(() => {
   justify-content: space-between;
   gap: 0.5rem;
   margin-top: auto;
-  padding-top: 0.75rem;
-  border-top: 1px solid #f3f4f6;
+  padding-top: 0.5rem;
+  font-size: 0.75rem;
+  color: #9ca3af;
 }
 
 .kb-meta-item {
@@ -2011,7 +2154,12 @@ onMounted(() => {
   align-items: center;
   gap: 0.25rem;
   font-size: 0.75rem;
-  color: #6b7280;
+  color: #9ca3af;
+}
+
+/* 卡片 footer：清掉 VCard 默认内边距，由 .kb-card-footer 统一控制 */
+.kb-card-grid :deep(.card-footer) {
+  padding: 0;
 }
 
 .kb-card-footer {
@@ -2019,10 +2167,7 @@ onMounted(() => {
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
-  padding: 0.5rem 0.875rem;
-  border-top: 1px solid #f3f4f6;
-  background: #fafafa;
-  border-radius: 0 0 12px 12px;
+  padding: 0.25rem 0.5rem 0.625rem;
 }
 
 .kb-card-actions {
@@ -2031,10 +2176,34 @@ onMounted(() => {
   gap: 0.5rem;
 }
 
-.kb-enter-btn {
-  height: 1.875rem;
+/* 内联操作组与「更多」菜单：桌面显示内联，移动端显示更多 */
+.kb-actions-inline {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.icon-btn.kb-more-btn {
+  display: none;
+  background: #f3f4f6;
+  color: #4b5563;
+  border-color: transparent;
+}
+
+.kb-list-actions .kb-actions-inline {
+  gap: 0.375rem;
+}
+
+.kb-card-footer .kb-enter-btn {
+  height: 1.625rem;
   padding-top: 0;
   padding-bottom: 0;
+}
+
+/* 卡片 footer 内图标按钮：比默认更紧凑 */
+.kb-card-footer .icon-btn {
+  width: 1.625rem;
+  height: 1.625rem;
 }
 
 /* ========== 图标按钮（仅图标，无文字） ========== */
@@ -2091,58 +2260,25 @@ onMounted(() => {
   border-color: #fecaca;
 }
 
-/* ========== 标签胶囊（卡片标题下） ========== */
-.kb-tag-list-inline {
-  margin-top: 0.375rem;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.375rem;
-  min-height: 0;
-}
-
-.kb-tag-chip {
-  display: inline-flex;
-  align-items: center;
-  max-width: 8rem;
-  padding: 0.0625rem 0.5rem;
-  font-size: 0.6875rem;
-  font-weight: 500;
-  line-height: 1.4;
-  color: #475569;
-  background: #f1f5f9;
-  border: 1px solid #e2e8f0;
-  border-radius: 9999px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
 /* ========== 列表视图 ========== */
 .kb-list {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
-}
-
-.kb-card-list {
-  width: 100%;
-  border: 1px solid #e5e7eb;
-  border-radius: 10px;
-  transition: all 0.2s ease;
-  cursor: pointer;
-}
-
-.kb-card-list:hover {
-  border-color: #d1d5db;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  gap: 0.125rem;
 }
 
 .kb-list-row {
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  width: 100%;
-  padding: 0.875rem 1rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.kb-list-row:hover {
+  background: #f5f7fa;
 }
 
 .kb-list-info {
@@ -2161,21 +2297,66 @@ onMounted(() => {
   max-width: 100%;
 }
 
+.kb-list-desc {
+  margin: 0.125rem 0 0;
+  font-size: 0.75rem;
+  color: #9ca3af;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.kb-list-side {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
 .kb-list-meta {
   display: flex;
   align-items: center;
-  gap: 1rem;
+  gap: 0.875rem;
+  color: #9ca3af;
   flex-shrink: 0;
-  min-width: 220px;
-  color: #6b7280;
 }
 
 .kb-list-actions {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.375rem;
   flex-shrink: 0;
-  margin-left: auto;
+}
+
+/* 列表内操作组：默认中性灰，hover 时呈现各自彩色 */
+.kb-list-actions .icon-btn {
+  background: #f3f4f6;
+  color: #6b7280;
+  border-color: transparent;
+}
+
+.kb-list-actions .icon-btn-share.is-on {
+  background: #d1fae5;
+  color: #047857;
+}
+
+/* 桌面端宽屏：数量/时间信息靠最右；行 hover 时按钮组展开，信息自动左移让位（窄屏/触屏设备按钮常显） */
+@media (hover: hover) and (min-width: 768px) {
+  .kb-list-actions {
+    max-width: 0;
+    margin-left: 0;
+    opacity: 0;
+    overflow: hidden;
+    transition: max-width 0.25s ease, opacity 0.2s ease, margin-left 0.25s ease;
+  }
+
+  .kb-list-row:hover .kb-list-actions,
+  .kb-list-row:focus-within .kb-list-actions {
+    max-width: 10rem;
+    margin-left: 1.25rem;
+    opacity: 1;
+  }
 }
 
 @media (max-width: 1024px) {
@@ -2184,24 +2365,18 @@ onMounted(() => {
   }
 
   .kb-list-info {
-    width: calc(100% - 4rem);
+    flex: 1 1 calc(100% - 4.5rem);
   }
 
-  .kb-list-meta {
-    width: 100%;
-    margin-left: 2.5rem;
+  .kb-list-side {
+    flex: 1 1 100%;
+    margin-left: 4.5rem;
     margin-top: 0.5rem;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.5rem;
   }
 
-  .kb-list-actions {
-    width: 100%;
-    justify-content: flex-end;
-    margin-left: 2.5rem;
-    margin-top: 0.5rem;
-  }
-}
-
-@media (min-width: 1025px) {
   .kb-list-actions {
     margin-left: auto;
   }
@@ -2606,5 +2781,291 @@ onMounted(() => {
 
 .share-copy-btn {
   flex-shrink: 0;
+}
+
+/* ========== 移动端适配（≤767px） ========== */
+@media (max-width: 767px) {
+  .knowledge-base-body {
+    padding: 0.625rem;
+    gap: 0.625rem;
+  }
+
+  /* 顶部标题区：标题与按钮同行不换行，按钮仅图标 */
+  :deep(.page-header) {
+    flex-wrap: nowrap;
+    padding: 0.625rem 0.875rem;
+  }
+
+  :deep(.page-header__actions) {
+    width: auto;
+    flex-wrap: nowrap;
+    flex-shrink: 0;
+    gap: 0.5rem;
+  }
+
+  :deep(.page-header__actions .btn) {
+    flex: 0 0 auto;
+    justify-content: center;
+    width: 2.125rem;
+    height: 2.125rem;
+    padding: 0;
+  }
+
+  :deep(.page-header__actions .btn .btn-content) {
+    display: none;
+  }
+
+  :deep(.page-header__actions .btn .btn-icon) {
+    margin: 0;
+  }
+
+  /* 移动端隐藏统计面板 */
+  .stats-panel,
+  .stats-hidden-bar {
+    display: none;
+  }
+
+  /* 内容面板 */
+  .kb-content-panel {
+    padding: 0.625rem;
+    border-radius: 10px;
+  }
+
+  /* 批量操作栏：垂直堆叠，按钮整行排布 */
+  .batch-bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.625rem;
+    padding: 0.625rem 0.75rem;
+  }
+
+  .batch-bar :deep(.space-wrapper) {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .batch-bar :deep(.space-wrapper .btn) {
+    flex: 1 1 auto;
+    justify-content: center;
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+
+  /* 工具栏：筛选占一行，搜索框与排序下拉同一行 */
+  .toolbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "tabs tabs"
+      "search sort";
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .toolbar-left {
+    display: contents;
+  }
+
+  .filter-tabs {
+    grid-area: tabs;
+    width: 100%;
+    display: flex;
+  }
+
+  .filter-tabs button {
+    flex: 1 1 0;
+    padding: 0.5rem 0.25rem;
+    font-size: 0.8125rem;
+    white-space: nowrap;
+  }
+
+  .search-box {
+    grid-area: search;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .search-input {
+    height: 2.375rem;
+  }
+
+  .toolbar-right {
+    grid-area: sort;
+    width: auto;
+    justify-content: flex-end;
+  }
+
+  .sort-select {
+    flex: 0 0 auto;
+    min-width: 0;
+    max-width: 9.5rem;
+  }
+
+  /* 网格视图：单列布局，卡片内边距收紧 */
+  .kb-grid {
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+  }
+
+  .kb-card-header {
+    padding: 0.875rem 0.875rem 0.5rem;
+  }
+
+  .kb-card-info {
+    padding-right: 3.25rem;
+  }
+
+  .kb-card-body {
+    padding: 0.5rem 0.875rem 0.875rem;
+  }
+
+  .kb-card-footer {
+    padding: 0.5rem 0.75rem;
+  }
+
+  /* 移动端：操作收进「更多」菜单 */
+  .kb-actions-inline {
+    display: none;
+  }
+
+  .icon-btn.kb-more-btn {
+    display: inline-flex;
+  }
+
+  /* 移动端视图切换：强制列表模式，隐藏切换按钮 */
+  .view-toggle {
+    display: none;
+  }
+
+  /* ===== 移动端列表视图：卡片式行，杜绝横向溢出 ===== */
+  .kb-list {
+    gap: 0.625rem;
+  }
+
+  .kb-list-row {
+    align-items: center;
+    gap: 0.625rem;
+    padding: 0.75rem 0.875rem;
+    background: #ffffff;
+    border: 1px solid #eef0f2;
+    border-radius: 12px;
+    box-shadow: 0 1px 2px rgba(17, 24, 39, 0.04);
+    max-width: 100%;
+  }
+
+  .kb-list-row:active {
+    background: #f9fafb;
+  }
+
+  .kb-list-row .kb-checkbox {
+    width: 1.125rem;
+    height: 1.125rem;
+    flex-shrink: 0;
+  }
+
+  .kb-list-info {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  .kb-list-title-row {
+    gap: 0.375rem;
+    min-width: 0;
+  }
+
+  .kb-list-title-row .kb-card-title {
+    flex: 1 1 0;
+    min-width: 0;
+    font-size: 0.9375rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .kb-list-title-row .kb-status-inline {
+    flex-shrink: 0;
+    font-size: 0.6875rem;
+    padding: 0.125rem 0.5rem;
+  }
+
+  .kb-list-desc {
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    font-size: 0.8125rem;
+    line-height: 1.5;
+    color: #6b7280;
+    margin-top: 0.25rem;
+    word-break: break-word;
+    overflow: hidden;
+  }
+
+  /* 第二行：元信息 + 更多按钮，margin-left 归零修复溢出 */
+  .kb-list-side {
+    flex: 1 1 100%;
+    margin-left: 0;
+    margin-top: 0.375rem;
+    justify-content: space-between;
+    flex-wrap: nowrap;
+    gap: 0.5rem;
+    padding-top: 0.5rem;
+    border-top: 1px dashed #eef0f2;
+    min-width: 0;
+  }
+
+  .kb-list-meta {
+    min-width: 0;
+    gap: 0.625rem;
+    font-size: 0.75rem;
+  }
+
+  .kb-list-actions {
+    gap: 0.375rem;
+    margin-left: auto;
+    flex-shrink: 0;
+  }
+
+  /* 弹窗宽度适配（新建/导入/分享） */
+  :deep(.modal-content) {
+    width: calc(100vw - 1.5rem) !important;
+    max-height: 85vh;
+  }
+
+  /* 分享表单：窄屏下纵向堆叠 */
+  .share-row {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .share-toggle-row {
+    flex-direction: row;
+  }
+
+  /* 纵向堆叠后 align-items: center 会把标题区水平居中，改为拉伸保持左对齐 */
+  .share-link-row {
+    align-items: stretch;
+  }
+
+  .share-row-right {
+    width: 100%;
+  }
+
+  .share-input,
+  .share-link-input {
+    width: 100%;
+  }
+
+  .share-link-box {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+/* 极窄屏（≤400px）：进一步收紧 */
+@media (max-width: 400px) {
+  .kb-card-info {
+    padding-right: 2.75rem;
+  }
 }
 </style>

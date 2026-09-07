@@ -166,4 +166,26 @@ function onSizeChange(event: Event) {
 .pagination-bar-size-label {
   white-space: nowrap;
 }
+
+/* 窄屏：分页栏更紧凑 */
+@media (max-width: 480px) {
+  .pagination-bar {
+    gap: 0.625rem;
+  }
+
+  .pagination-bar-text {
+    min-width: 3.5rem;
+    padding: 0 0.5rem;
+    font-size: 0.8125rem;
+  }
+
+  .pagination-bar-size {
+    gap: 0.375rem;
+    font-size: 0.8125rem;
+  }
+
+  .pagination-bar-select {
+    min-width: 4rem;
+  }
+}
 </style>
