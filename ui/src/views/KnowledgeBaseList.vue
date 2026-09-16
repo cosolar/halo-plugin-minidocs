@@ -159,6 +159,36 @@ async function onKbCoverChange(e: Event) {
   }
 }
 
+// 知识库图标(logo)上传
+const kbLogoInput = ref<HTMLInputElement | null>(null);
+function triggerKbLogo() {
+  kbLogoInput.value?.click();
+}
+async function onKbLogoChange(e: Event) {
+  const input = e.target as HTMLInputElement;
+  const file = input.files?.[0];
+  if (!file) {
+    return;
+  }
+  try {
+    const { data } =
+      await consoleApiClient.storage.attachment.uploadAttachmentForConsole({
+        file,
+      });
+    const url = data.status?.permalink;
+    if (url) {
+      form.logo = url;
+      Toast.success("图标已上传");
+    } else {
+      Toast.error("上传成功但未获取到图片地址");
+    }
+  } catch {
+    Toast.error("图标上传失败，请重试");
+  } finally {
+    input.value = "";
+  }
+}
+
 // 知识库导出
 const exporting = ref(false);
 async function exportSelected() {
@@ -1480,6 +1510,54 @@ onBeforeUnmount(() => {
             可直接粘贴图片链接，或上传本地图片作为封面。建议用不含文字的纯视觉图（横向比例
             3:1 左右，主体居中）——标题由卡片单独渲染，图片里再写一遍标题会与卡片标题重复，
             且可能被封面裁切、无法被搜索
+          </p>
+        </div>
+        <div class="mb-4">
+          <label class="formkit-label block text-sm font-medium text-gray-700">
+            图标（logo）
+          </label>
+          <div class="kb-logo-field">
+            <div class="kb-logo-preview">
+              <img v-if="form.logo" :src="form.logo" alt="知识库图标" />
+              <span v-else class="kb-logo-placeholder">
+                <svg viewBox="0 0 1024 1024" fill="currentColor" aria-hidden="true">
+                  <path d="M136.533333 170.666667a102.4 102.4 0 0 1 102.4-102.4h68.266667a238.7968 238.7968 0 0 1 204.8 115.780266A238.7968 238.7968 0 0 1 716.8 68.266667h68.266667a102.4 102.4 0 0 1 102.4 102.4v102.4a102.4 102.4 0 0 1 102.4 102.4v409.6a170.666667 170.666667 0 0 1-170.666667 170.666666H204.8a170.666667 170.666667 0 0 1-170.666667-170.666666V375.466667a102.4 102.4 0 0 1 102.4-102.4V170.666667z m0 170.666666a34.133333 34.133333 0 0 0-34.133333 34.133334v409.6a102.4 102.4 0 0 0 102.4 102.4h614.4a102.4 102.4 0 0 0 102.4-102.4V375.466667a34.133333 34.133333 0 0 0-34.133333-34.133334v409.6a102.4 102.4 0 0 1-102.4 102.4H238.933333a102.4 102.4 0 0 1-102.4-102.4V341.333333z m170.666667-204.8H238.933333a34.133333 34.133333 0 0 0-34.133333 34.133334v580.266666a34.133333 34.133333 0 0 0 34.133333 34.133334h238.933334V307.2a170.666667 170.666667 0 0 0-170.666667-170.666667z m477.866667 648.533334a34.133333 34.133333 0 0 0 34.133333-34.133334V170.666667a34.133333 34.133333 0 0 0-34.133333-34.133334h-68.266667a170.666667 170.666667 0 0 0-170.666667 170.666667v477.866667h238.933334z"></path>
+                </svg>
+              </span>
+            </div>
+            <div class="kb-logo-actions">
+              <input
+                v-model="form.logo"
+                type="text"
+                class="kb-cover-url-input"
+                placeholder="粘贴图标链接"
+              />
+              <div class="kb-cover-btn-row">
+                <VButton size="sm" type="primary" @click="triggerKbLogo">
+                  <template #icon>
+                    <IconUpload class="h-3.5 w-3.5" />
+                  </template>
+                  上传本地图标
+                </VButton>
+                <input
+                  ref="kbLogoInput"
+                  type="file"
+                  accept="image/*"
+                  class="hidden-file-input"
+                  @change="onKbLogoChange"
+                />
+                <button
+                  v-if="form.logo"
+                  class="kb-cover-remove"
+                  @click="form.logo = ''"
+                >
+                  移除图标
+                </button>
+              </div>
+            </div>
+          </div>
+          <p class="formkit-help mt-1 text-xs text-gray-500">
+            可直接粘贴图标地址，或上传本地图片。未设置时卡片将显示默认书本图标
           </p>
         </div>
         <FormKit
@@ -3003,6 +3081,54 @@ onBeforeUnmount(() => {
 
 .kb-cover-remove:hover {
   text-decoration: underline;
+}
+
+/* ========== 知识库图标(logo)上传 ========== */
+.kb-logo-field {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+  margin-top: 0.375rem;
+}
+
+.kb-logo-preview {
+  width: 3rem;
+  height: 3rem;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.625rem;
+  border: 1px solid #e8e8e8;
+  background: #fafafa;
+  overflow: hidden;
+}
+
+.kb-logo-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.kb-logo-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  color: #10b981;
+}
+
+.kb-logo-placeholder svg {
+  width: 60%;
+  height: 60%;
+}
+
+.kb-logo-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.375rem;
 }
 
 /* ========== 导入知识库预览 ========== */
