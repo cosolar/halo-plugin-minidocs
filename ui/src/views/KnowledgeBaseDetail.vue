@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
-import { useRoute, useRouter } from "vue-router";
+import { onBeforeRouteLeave, useRoute, useRouter } from "vue-router";
 import {
   Dialog,
   Toast,
@@ -171,6 +171,146 @@ function persistLayout() {
     }));
   } catch { /* ignore */ }
 }
+
+// ===== 未保存内容提醒 + 本地草稿自动保存/恢复 =====
+const dirty = ref(false);
+const DRAFT_PREFIX = `minidocs:doc-draft:${kbName}:`;
+const draftKey = (docName: string) => `${DRAFT_PREFIX}${docName}`;
+
+interface DraftData {
+  markdown: string;
+  title: string;
+  updatedAt: number;
+}
+
+// 是否“有未保存改动”：正文或标题发生了变更
+function computeDirty() {
+  const md = docForm.markdown.trim();
+  const savedRaw = (doc.value?.spec.raw || "").trim();
+  if (md !== savedRaw) return true;
+  if (docForm.title !== (doc.value?.spec.title || "")) return true;
+  return false;
+}
+
+function saveDraftNow() {
+  if (!selected.value || !dirty.value) return;
+  const draft: DraftData = {
+    markdown: docForm.markdown,
+    title: docForm.title,
+    updatedAt: Date.now(),
+  };
+  try {
+    localStorage.setItem(draftKey(selected.value.name), JSON.stringify(draft));
+  } catch { /* ignore */ }
+}
+
+function clearDraft(docName?: string) {
+  if (!docName && selected.value) docName = selected.value.name;
+  if (!docName) return;
+  try {
+    localStorage.removeItem(draftKey(docName));
+  } catch { /* ignore */ }
+}
+
+// 返回本地是否有该文档的未保存草稿
+function getLocalDraft(docName: string): DraftData | null {
+  try {
+    const raw = localStorage.getItem(draftKey(docName));
+    if (!raw) return null;
+    return JSON.parse(raw) as DraftData;
+  } catch {
+    return null;
+  }
+}
+
+// 离开守卫：有未保存改动时挂起导航，弹确认框
+let pendingLeave: (() => void) | null = null;
+const leaveModalVisible = ref(false);
+onBeforeRouteLeave((_to, _from, next) => {
+  if (!dirty.value) {
+    next();
+    return;
+  }
+  saveDraftNow();
+  pendingLeave = next;
+  leaveModalVisible.value = true;
+});
+function confirmLeave() {
+  const nav = pendingNav;
+  const leave = pendingLeave;
+  pendingNav = null;
+  pendingLeave = null;
+  leaveModalVisible.value = false;
+  if (!nav && !leave) return;
+  // 放弃前把当前改动存入本地草稿，之后仍可进入恢复
+  saveDraftNow();
+  dirty.value = false;
+  if (nav) nav();
+  else if (leave) leave();
+}
+function cancelLeave() {
+  const cancel = pendingLeave;
+  pendingNav = null;
+  pendingLeave = null;
+  leaveModalVisible.value = false;
+  // 留在当前文档继续编辑，dirty 保持不变
+  if (cancel) cancel(false);
+}
+
+// 草稿恢复确认
+const recoverModalVisible = ref(false);
+let pendingRecover: DraftData | null = null;
+function confirmRecover() {
+  if (pendingRecover && markdownEditorRef.value) {
+    markdownEditorRef.value.setContent(pendingRecover.markdown);
+  }
+  docForm.markdown = pendingRecover?.markdown || docForm.markdown;
+  docForm.title = pendingRecover?.title || docForm.title;
+  pendingRecover = null;
+  recoverModalVisible.value = false;
+  dirty.value = true;
+}
+function discardDraft() {
+  if (selected.value) clearDraft(selected.value.name);
+  pendingRecover = null;
+  recoverModalVisible.value = false;
+}
+
+// 进入文档后：若存在本地草稿且与已保存内容不同，提示恢复
+function offerDraftRecovery(docName: string, loadedRaw: string) {
+  const draft = getLocalDraft(docName);
+  if (!draft) return;
+  if (draft.markdown.trim() === (loadedRaw || "").trim()) {
+    // 草稿与已保存一致，无恢复价值，静默清理
+    clearDraft(docName);
+    return;
+  }
+  pendingRecover = draft;
+  recoverModalVisible.value = true;
+}
+
+// 自动保存草稿定时器：5s 一次，仅在“有改动”时写入
+let draftTimer: ReturnType<typeof setInterval> | null = null;
+
+function onBeforeUnload(e: BeforeUnloadEvent) {
+  if (!dirty.value) return;
+  saveDraftNow();
+  e.preventDefault();
+  e.returnValue = "";
+}
+onMounted(() => {
+  window.addEventListener("beforeunload", onBeforeUnload);
+  draftTimer = setInterval(() => {
+    if (dirty.value) saveDraftNow();
+  }, 5000);
+});
+onBeforeUnmount(() => {
+  window.removeEventListener("beforeunload", onBeforeUnload);
+  if (draftTimer) {
+    clearInterval(draftTimer);
+    draftTimer = null;
+  }
+});
 
 // 左侧边栏拖拽调整宽度（默认 280px，可拖 220~600px），右侧主区随 flex 自动跟随
 const sidebarWidth = ref(280);
@@ -746,7 +886,22 @@ async function loadTree() {
   }
 }
 
-async function selectDoc(node: DocTreeNode) {
+// 切换文档（或离开页面）前若有未保存改动，先拦截确认
+// 注：点侧边栏切换文档是通过改 URL query 在同一路由内完成，不走 onBeforeRouteLeave，
+// 因此在这里自行拦截；确认后再真正切换。
+let pendingNav: (() => void) | null = null;
+function selectDoc(node: DocTreeNode) {
+  const switching = selected.value && selected.value.name !== node.name;
+  if (dirty.value && switching && !recoverModalVisible.value) {
+    pendingNav = () => doSelectDoc(node);
+    saveDraftNow();
+    leaveModalVisible.value = true;
+    return;
+  }
+  void doSelectDoc(node);
+}
+
+async function doSelectDoc(node: DocTreeNode) {
   selected.value = node;
   // 同步到 URL query，刷新后可恢复
   router.replace({ query: { ...route.query, doc: node.name } });
@@ -773,6 +928,9 @@ async function selectDoc(node: DocTreeNode) {
     // 这里不再手动 setContent，避免大文档重复全量渲染
     // 移动端：选中文档后自动收起目录抽屉
     closeMobileSidebar();
+    // 重置未保存标记，并检查是否有本地草稿需要恢复
+    dirty.value = false;
+    offerDraftRecovery(node.name, data.spec.raw || "");
   } finally {
     docLoading.value = false;
   }
@@ -821,6 +979,9 @@ async function saveDoc() {
       doc.value.spec = payload.spec;
     }
     await loadTree();
+    // 保存成功：清除本地草稿，重置未保存标记
+    clearDraft(selected.value.name);
+    dirty.value = false;
   } finally {
     saving.value = false;
   }
@@ -1246,6 +1407,14 @@ watch(
   { deep: true }
 );
 watch(sidebarWidth, () => persistLayout());
+
+// 监听文档正文 / 标题变化以维护“未保存”标记
+watch(
+  () => [docForm.markdown, docForm.title],
+  () => {
+    dirty.value = computeDirty();
+  }
+);
 
 onMounted(async () => {
   restoreLayout();
@@ -1719,6 +1888,34 @@ onMounted(async () => {
         <VSpace>
           <VButton type="secondary" @click="moveModalVisible = false">取消</VButton>
           <VButton type="primary" @click="confirmMove">确定</VButton>
+        </VSpace>
+      </template>
+    </VModal>
+
+    <!-- 未保存离开确认 -->
+    <VModal v-model:visible="leaveModalVisible" title="放弃未保存的更改？" :width="480">
+      <p class="text-sm text-gray-600">
+        当前文档有未保存的修改。离开后内容会保留为本地草稿，稍后进入可恢复。
+      </p>
+      <template #footer>
+        <VSpace>
+          <VButton type="secondary" @click="cancelLeave">留下继续编辑</VButton>
+          <VButton type="danger" @click="confirmLeave">放弃修改并离开</VButton>
+        </VSpace>
+      </template>
+    </VModal>
+
+    <!-- 本地草稿恢复 -->
+    <VModal v-model:visible="recoverModalVisible" title="发现未保存的草稿" :width="480">
+      <p class="text-sm text-gray-600">
+        检测到该文档存在本地自动保存的未提交修改
+        <span v-if="pendingRecover">（{{ new Date(pendingRecover.updatedAt).toLocaleString() }}）</span>。
+        是否恢复？
+      </p>
+      <template #footer>
+        <VSpace>
+          <VButton type="secondary" @click="discardDraft">放弃草稿</VButton>
+          <VButton type="primary" @click="confirmRecover">恢复草稿</VButton>
         </VSpace>
       </template>
     </VModal>
