@@ -93,17 +93,21 @@ public class KnowledgeBaseRouter {
                 }
                 var kbName = kb.getMetadata().getName();
                 var finalSetCookie = setCookie;
+                var catalogMode = KnowledgeBaseService.DOC_MODE_CATALOG.equals(
+                    kb.getSpec().getDocMode());
                 return docService.buildTree(kbName, KnowledgeBaseDocService.PHASE_PUBLISHED)
                     .flatMap(tree -> {
+                        var flat = KnowledgeBaseDocService.flattenTree(tree, catalogMode);
                         var effective = StringUtils.hasText(docSlug) ? docSlug
-                            : firstTreeSlug(tree);
+                            : firstTreeSlug(flat);
                         if (!StringUtils.hasText(effective)) {
-                            return Mono.just(new ResolvedShare(tree, null, null));
+                            return Mono.just(new ResolvedShare(tree, flat, null, null));
                         }
                         return docService.getPublishedDocBySlug(kbName, effective)
-                            .map(doc -> new ResolvedShare(tree, doc.getSpec().getSlug(), doc))
+                            .map(doc -> new ResolvedShare(tree, flat,
+                                doc.getSpec().getSlug(), doc))
                             .onErrorResume(e -> Mono.just(
-                                new ResolvedShare(tree, effective, null)));
+                                new ResolvedShare(tree, flat, effective, null)));
                     })
                     .flatMap(r -> knowledgeBaseService
                         .incrementAccess(kbName)
@@ -164,7 +168,7 @@ public class KnowledgeBaseRouter {
             var model = new HashMap<String, Object>();
             model.put("shareToken", token);
             model.put("knowledgeBase", kb);
-            model.put("docTree", r.tree());
+            model.put("docTreeFlat", r.flatTree());
             model.put("docSlug", r.docSlug());
             model.put("doc", r.doc());
             model.put("gate", false);
@@ -207,14 +211,15 @@ public class KnowledgeBaseRouter {
     // ---------------- 数据/校验辅助 ----------------
 
     private record ResolvedShare(List<KnowledgeBaseDocService.DocTreeNode> tree,
+                                 List<KnowledgeBaseDocService.TreeFlatNode> flatTree,
                                  String docSlug, KnowledgeBaseDoc doc) {
     }
 
-    private String firstTreeSlug(List<KnowledgeBaseDocService.DocTreeNode> tree) {
-        if (tree == null || tree.isEmpty()) {
+    private String firstTreeSlug(List<KnowledgeBaseDocService.TreeFlatNode> flatTree) {
+        if (flatTree == null || flatTree.isEmpty()) {
             return null;
         }
-        return tree.get(0).getSlug();
+        return flatTree.get(0).slug();
     }
 
     private String shareCookie(ServerRequest request, String token) {

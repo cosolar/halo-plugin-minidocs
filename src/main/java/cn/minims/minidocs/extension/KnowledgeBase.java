@@ -82,6 +82,10 @@ public class KnowledgeBase extends AbstractExtension {
         @Schema(description = "已点赞用户名列表（用于点赞去重与取消点赞）")
         private List<String> likedUsers;
 
+        @Schema(description = "文档组织模式：catalog=目录模式（父文档仅作为目录展示，点击自动展开并打开其下第一个文档）；hierarchy=父子文档模式（父文档本身也是可阅读文档）。为空按 hierarchy 处理",
+            defaultValue = "hierarchy")
+        private String docMode = "hierarchy";
+
         @Schema(description = "是否开启外链分享（null 表示未提交，更新时沿用旧值）")
         private Boolean shareEnabled;
 

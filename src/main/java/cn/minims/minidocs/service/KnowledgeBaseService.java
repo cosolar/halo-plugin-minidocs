@@ -423,6 +423,28 @@ public class KnowledgeBaseService {
     private static final SecureRandom SHARE_RANDOM = new SecureRandom();
 
     /**
+     * 自定义分享 token 的合法格式：3-32 位字母/数字/连字符/下划线（URL 安全）。
+     */
+    public static final String SHARE_TOKEN_PATTERN = "^[a-zA-Z0-9_-]{3,32}$";
+
+    /**
+     * 文档组织模式：目录模式（父文档仅作为目录，点击自动展开并打开其下第一个文档）。
+     */
+    public static final String DOC_MODE_CATALOG = "catalog";
+
+    /**
+     * 文档组织模式：父子文档模式（父文档本身也是可阅读文档，默认值）。
+     */
+    public static final String DOC_MODE_HIERARCHY = "hierarchy";
+
+    /**
+     * 归一化文档组织模式：空白或非法值回退为 hierarchy。
+     */
+    public static String normalizeDocMode(String docMode) {
+        return DOC_MODE_CATALOG.equals(docMode) ? DOC_MODE_CATALOG : DOC_MODE_HIERARCHY;
+    }
+
+    /**
      * 生成外链分享 token（12 位 URL 安全随机串），不可猜测、不与 slug 冲突。
      */
     public static String generateShareToken() {
@@ -431,6 +453,42 @@ public class KnowledgeBaseService {
             sb.append(SHARE_TOKEN_ALPHABET[SHARE_RANDOM.nextInt(SHARE_TOKEN_ALPHABET.length)]);
         }
         return sb.toString();
+    }
+
+    /**
+     * 判断分享 token 是否已被其它知识库占用（全局唯一，开启与否均占用）。
+     *
+     * @param token       待校验的分享 token
+     * @param excludeName 当前知识库的 metadata.name（更新自身时排除），可为 null
+     */
+    public Mono<Boolean> shareTokenExists(String token, String excludeName) {
+        if (!StringUtils.hasText(token)) {
+            return Mono.just(false);
+        }
+        var options = ListOptions.builder().fieldQuery(equal("spec.shareToken", token)).build();
+        return client.listBy(KnowledgeBase.class, options, PageRequestImpl.of(1, 100))
+            .map(result -> result.getItems().stream()
+                .anyMatch(kb -> excludeName == null
+                    || !excludeName.equals(kb.getMetadata().getName())));
+    }
+
+    /**
+     * 校验用户自定义分享 token：格式合法且全局唯一，否则以 400 拒绝。
+     */
+    private Mono<Void> validateCustomShareToken(String token, String excludeName) {
+        if (!StringUtils.hasText(token)) {
+            return Mono.empty();
+        }
+        var trimmed = token.trim();
+        if (!trimmed.matches(SHARE_TOKEN_PATTERN)) {
+            return Mono.error(new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                "分享 Token 只能包含字母、数字、连字符和下划线，长度 3-32 位"));
+        }
+        return shareTokenExists(trimmed, excludeName)
+            .flatMap(exists -> exists
+                ? Mono.error(new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "分享 Token 已被其它知识库占用: " + trimmed))
+                : Mono.empty());
     }
 
     /**
@@ -608,8 +666,11 @@ public class KnowledgeBaseService {
         if (!StringUtils.hasText(kb.getSpec().getSlug())) {
             kb.getSpec().setSlug(generateSlug());
         }
+        // 文档组织模式归一化（非法值回退 hierarchy）
+        kb.getSpec().setDocMode(normalizeDocMode(kb.getSpec().getDocMode()));
         syncShare(kb.getSpec());
-        return slugExists(kb.getSpec().getSlug(), null)
+        return validateCustomShareToken(kb.getSpec().getShareToken(), null)
+            .then(slugExists(kb.getSpec().getSlug(), null))
             .flatMap(exists -> {
                 if (exists) {
                     return Mono.error(new ResponseStatusException(HttpStatus.BAD_REQUEST,
@@ -645,6 +706,8 @@ public class KnowledgeBaseService {
             old.setTags(patch.getTags());
             old.setMembers(patch.getMembers());
             old.setPublicVisible(patch.getPublicVisible());
+            // 文档组织模式：空白/非法值归一化为 hierarchy
+            old.setDocMode(normalizeDocMode(patch.getDocMode()));
             // 外链分享设置：显式提交开关时才更新（开启以提交值为准，token 缺省沿用旧值）；
             // 普通编辑（未提交分享字段）完全不动分享设置，避免静默关闭已开启的外链。
             // 关闭时仅记录开关，保留 token/密码/有效期，重新开启后沿用原外链。
@@ -652,7 +715,7 @@ public class KnowledgeBaseService {
             if (Boolean.TRUE.equals(shareEnabled)) {
                 old.setShareEnabled(true);
                 if (StringUtils.hasText(patch.getShareToken())) {
-                    old.setShareToken(patch.getShareToken());
+                    old.setShareToken(patch.getShareToken().trim());
                 }
                 old.setSharePassword(patch.getSharePassword());
                 old.setShareExpiresAt(patch.getShareExpiresAt());
@@ -668,7 +731,8 @@ public class KnowledgeBaseService {
             if (!StringUtils.hasText(old.getSlug())) {
                 old.setSlug(generateSlug());
             }
-            return slugExists(old.getSlug(), name)
+            return validateCustomShareToken(old.getShareToken(), name)
+                .then(slugExists(old.getSlug(), name))
                 .flatMap(exists -> {
                     if (exists) {
                         return Mono.error(new ResponseStatusException(HttpStatus.BAD_REQUEST,

@@ -97,7 +97,11 @@ public class MinidocsFinder {
 
     /**
      * 已发布文档树（所属知识库必须可访问）。
+     *
+     * @deprecated 模板请改用 {@link #getDocTreeFlat(String)} 平铺渲染；
+     *             Thymeleaf 递归片段在响应式流式渲染下对大树不可靠。
      */
+    @Deprecated
     public Mono<List<DocTreeNode>> getDocTree(String kbSlug) {
         return resolveAccessible(kbSlug)
             .flatMap(kb -> canAccess(kb)
@@ -105,6 +109,22 @@ public class MinidocsFinder {
                     ? docService.buildTree(kb.getMetadata().getName(),
                         KnowledgeBaseDocService.PHASE_PUBLISHED)
                     : Mono.just(List.<DocTreeNode>of())));
+    }
+
+    /**
+     * 已发布文档树的扁平化列表（所属知识库必须可访问），供模板平铺渲染，
+     * 避免模板端递归片段在响应式流式渲染下对大树的截断问题。
+     */
+    public Mono<List<KnowledgeBaseDocService.TreeFlatNode>> getDocTreeFlat(String kbSlug) {
+        return resolveAccessible(kbSlug)
+            .flatMap(kb -> canAccess(kb)
+                .flatMap(ok -> ok
+                    ? docService.buildTree(kb.getMetadata().getName(),
+                            KnowledgeBaseDocService.PHASE_PUBLISHED)
+                        .map(tree -> KnowledgeBaseDocService.flattenTree(tree,
+                            KnowledgeBaseService.DOC_MODE_CATALOG.equals(
+                                kb.getSpec().getDocMode())))
+                    : Mono.just(List.<KnowledgeBaseDocService.TreeFlatNode>of())));
     }
 
     /**

@@ -59,6 +59,7 @@ public class MinidocsPublicEndpoint implements CustomEndpoint {
             .POST("/knowledgebases/{kbSlug}/like", this::toggleLike)
             .GET("/share/{shareToken}/stats", this::getShareStats)
             .POST("/share/{shareToken}/like", this::toggleShareLike)
+            .GET("/share/{shareToken}/docs/{docSlug}", this::getShareDoc)
             .build();
     }
 
@@ -237,6 +238,36 @@ public class MinidocsPublicEndpoint implements CustomEndpoint {
                 .flatMap(username ->
                     knowledgeBaseService.likeOnce(kb.getMetadata().getName(), username)
                         .flatMap(body -> ServerResponse.ok().bodyValue(body))));
+    }
+
+    /**
+     * 分享链路按 slug 获取单篇已发布文档（供分享页无刷新切换文档）。
+     * <p>仅需有效外链（含密码 cookie 校验），返回前端渲染所需的精简字段；
+     * 每次成功获取计一次知识库访问量（与整页加载行为一致）。
+     */
+    private Mono<ServerResponse> getShareDoc(ServerRequest request) {
+        var token = request.pathVariable("shareToken");
+        var docSlug = request.pathVariable("docSlug");
+        return resolveShareAccess(token, request)
+            .flatMap(kb -> docService
+                .getPublishedDocBySlug(kb.getMetadata().getName(), docSlug)
+                .flatMap(doc -> knowledgeBaseService
+                    .incrementAccess(kb.getMetadata().getName())
+                    .thenReturn(doc))
+                .flatMap(doc -> {
+                    var spec = doc.getSpec();
+                    Map<String, Object> body = new LinkedHashMap<>();
+                    body.put("title", spec.getTitle());
+                    body.put("slug", StringUtils.hasText(spec.getSlug())
+                        ? spec.getSlug() : doc.getMetadata().getName());
+                    body.put("content", spec.getContent());
+                    body.put("author", spec.getAuthor());
+                    body.put("creationTime", doc.getMetadata().getCreationTimestamp());
+                    body.put("updateTime", spec.getUpdateTime());
+                    return ServerResponse.ok().bodyValue(body);
+                })
+                .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND,
+                    "文档不存在: " + docSlug))));
     }
 
     /**

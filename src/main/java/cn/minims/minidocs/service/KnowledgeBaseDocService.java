@@ -365,17 +365,27 @@ public class KnowledgeBaseDocService {
 
     /**
      * 按 slug 查询已发布文档（公开接口使用）。
+     *
+     * <p>文档树输出的 {@code data-slug} 在文档未配置 slug 时会回退成
+     * {@code metadata.name}，因此这里额外按 name 兜底，保证阅读页 / 分享页
+     * 无刷新切换文档时不会因标识形式不同而返回 404。仍严格限制为已发布文档。
      */
     public Mono<KnowledgeBaseDoc> getPublishedDocBySlug(String slug) {
-        return client.listBy(KnowledgeBaseDoc.class,
+        Mono<KnowledgeBaseDoc> bySlug = client.listBy(KnowledgeBaseDoc.class,
                 ListOptions.builder().fieldQuery(and(
                     equal("spec.slug", slug),
                     equal("spec.phase", PHASE_PUBLISHED))).build(),
                 PageRequestImpl.of(1, 1))
             .flatMap(result -> result.getItems().stream().findFirst()
                 .map(Mono::just)
-                .orElseGet(() -> Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND,
-                    "文档不存在: " + slug))));
+                .orElseGet(Mono::empty));
+        Mono<KnowledgeBaseDoc> byName = client.fetch(KnowledgeBaseDoc.class, slug)
+            .filter(doc -> PHASE_PUBLISHED.equals(doc.getSpec().getPhase()))
+            .onErrorResume(e -> Mono.empty());
+        return bySlug
+            .switchIfEmpty(byName)
+            .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND,
+                "文档不存在: " + slug)));
     }
 
     /**
@@ -929,6 +939,74 @@ public class KnowledgeBaseDocService {
                 .parentName(spec.getParentName())
                 .children(new ArrayList<>())
                 .build();
+        }
+    }
+
+    /**
+     * 扁平化后的树节点：按先序遍历展开，供模板平铺渲染。
+     *
+     * <p>不要在模板里用 Thymeleaf 递归片段渲染树——在 WebFlux 响应式流式渲染下，
+     * 递归片段（自引用或跨模板）对大树渲染不可靠，会导致响应流中断。
+     *
+     * @param slug      文档标识（slug 为空时回退 metadata.name）
+     * @param name      metadata.name
+     * @param title     标题
+     * @param depth     层级（根为 0）
+     * @param liClass   li 的样式类（含缩进 md-dN 与 md-has-child/md-leaf），后端算好，
+     *                  模板直接输出；避免在模板里做带冒号的字符串拼接（Thymeleaf 解析器会失败）
+     * @param dir       是否含子文档（目录模式下显示为文件夹）
+     * @param childCount 直接子文档数
+     * @param parentSlug 父文档标识（根为空）
+     * @param ancestors  全部祖先 slug（含自身），空格分隔，供折叠级联隐藏
+     */
+    public record TreeFlatNode(String slug, String name, String title, int depth, String liClass,
+                               boolean dir, int childCount, String parentSlug,
+                               String ancestors) {
+    }
+
+    /**
+     * 缩进层级上限（对应 CSS 中的 li.md-d0 ~ li.md-d8）。
+     */
+    private static final int MAX_INDENT_DEPTH = 8;
+
+    /**
+     * 将文档树先序遍历展开为扁平节点列表（保持原树顺序）。
+     *
+     * @param catalog 是否目录模式：目录模式下初始仅展开第一个目录（其余目录折叠，
+     *                以 md-fold 类输出），配合前端「点击目录行 = 展开/折叠切换」的交互；
+     *                父子文档模式保持全部展开。
+     */
+    public static List<TreeFlatNode> flattenTree(List<DocTreeNode> tree, boolean catalog) {
+        List<TreeFlatNode> out = new ArrayList<>();
+        if (tree == null) {
+            return out;
+        }
+        walkTree(tree, 0, "", "", catalog, new boolean[]{false}, out);
+        return out;
+    }
+
+    private static void walkTree(List<DocTreeNode> nodes, int depth, String parentSlug,
+                                 String ancestors, boolean catalog, boolean[] firstDirSeen,
+                                 List<TreeFlatNode> out) {
+        for (DocTreeNode node : nodes) {
+            boolean dir = node.getChildren() != null && !node.getChildren().isEmpty();
+            String slug = StringUtils.hasText(node.getSlug()) ? node.getSlug() : node.getName();
+            String chain = ancestors.isEmpty() ? slug : ancestors + " " + slug;
+            String liClass = "md-d" + Math.min(depth, MAX_INDENT_DEPTH)
+                + (dir ? " md-has-child" : " md-leaf");
+            // 目录模式：初始仅展开第一个目录，其余目录折叠（点击目录行可切换）
+            if (catalog && dir) {
+                if (!firstDirSeen[0]) {
+                    firstDirSeen[0] = true;
+                } else {
+                    liClass += " md-fold";
+                }
+            }
+            out.add(new TreeFlatNode(slug, node.getName(), node.getTitle(), depth, liClass,
+                dir, dir ? node.getChildren().size() : 0, parentSlug, chain));
+            if (dir) {
+                walkTree(node.getChildren(), depth + 1, slug, chain, catalog, firstDirSeen, out);
+            }
         }
     }
 

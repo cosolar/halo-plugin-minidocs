@@ -59,6 +59,7 @@ interface KnowledgeBase {
     logo?: string;
     tags?: string[];
     publicVisible?: boolean;
+    docMode?: string;
     members?: string[];
     priority?: number;
     creationTime?: string;
@@ -127,6 +128,7 @@ const form = reactive({
   tags: [] as string[],
   members: [] as string[],
   publicVisible: false,
+  docMode: "hierarchy",
 });
 
 // 知识库封面上传
@@ -585,6 +587,7 @@ function openCreate() {
   form.tags = [];
   form.members = [];
   form.publicVisible = false;
+  form.docMode = "hierarchy";
   modalVisible.value = true;
 }
 
@@ -600,6 +603,7 @@ function openEdit(kb: KnowledgeBase) {
   form.tags = kb.spec.tags || [];
   form.members = kb.spec.members || [];
   form.publicVisible = !!kb.spec.publicVisible;
+  form.docMode = kb.spec.docMode === "catalog" ? "catalog" : "hierarchy";
   modalVisible.value = true;
 }
 
@@ -620,6 +624,7 @@ async function save() {
       tags: form.tags.filter(Boolean),
       members: form.publicVisible ? [] : form.members,
       publicVisible: form.publicVisible,
+      docMode: form.docMode === "catalog" ? "catalog" : "hierarchy",
     };
     if (editing.value) {
       await axiosInstance.put(`${API_PREFIX}/knowledgebases/${form.name}`, {
@@ -651,8 +656,12 @@ const shareForm = reactive({
   password: "",
   token: "",
   period: 0,
-  url: "",
 });
+
+const SHARE_TOKEN_PATTERN = /^[a-zA-Z0-9_-]{3,32}$/;
+
+// 分享外链随 Token 实时预览
+const shareUrl = computed(() => buildShareUrl(shareForm.token));
 
 function generateShareToken() {
   const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
@@ -661,6 +670,10 @@ function generateShareToken() {
     s += chars[Math.floor(Math.random() * chars.length)];
   }
   return s;
+}
+
+function randomizeShareToken() {
+  shareForm.token = generateShareToken();
 }
 
 function isKbShared(kb: KnowledgeBase) {
@@ -687,14 +700,19 @@ function openShare(kb: KnowledgeBase) {
     }
   }
   shareForm.period = period;
-  shareForm.url = buildShareUrl(shareForm.token);
   shareModalVisible.value = true;
 }
 
 async function saveShare() {
   const kb = shareKb.value;
   if (!kb) return;
-  if (shareForm.enabled && !shareForm.token) {
+  const token = shareForm.token.trim();
+  if (shareForm.enabled && token && !SHARE_TOKEN_PATTERN.test(token)) {
+    Toast.warning("分享 Token 只能包含字母、数字、连字符和下划线，长度 3-32 位");
+    return;
+  }
+  shareForm.token = token;
+  if (shareForm.enabled && !token) {
     shareForm.token = generateShareToken();
   }
   shareSaving.value = true;
@@ -720,18 +738,21 @@ async function saveShare() {
       | undefined;
     shareForm.enabled = !!(saved?.shareEnabled as boolean);
     shareForm.token = (saved?.shareToken as string) || shareForm.token;
-    shareForm.url = buildShareUrl(shareForm.token);
     // 保存后不关闭弹窗，方便立即复制外链
     Toast.success(shareForm.enabled ? "已保存，请复制外链" : "已关闭外链分享");
     // 刷新列表，同步卡片上的“已分享”状态标识
     await load();
+  } catch (e) {
+    // 自定义 Token 重复/格式不合法等：展示后端校验错误信息
+    const err = e as { response?: { data?: { detail?: string; title?: string } } };
+    Toast.error(err?.response?.data?.detail || err?.response?.data?.title || "保存失败，请检查分享设置");
   } finally {
     shareSaving.value = false;
   }
 }
 
 async function copyShareLink() {
-  const url = shareForm.url;
+  const url = shareUrl.value;
   if (!url) {
     Toast.warning("请先开启分享并保存，再复制链接");
     return;
@@ -1460,6 +1481,17 @@ onBeforeUnmount(() => {
           help="用于前台访问链接 /docs/view/别名，只能包含字母、数字、连字符和下划线"
         />
         <FormKit
+          v-model="form.docMode"
+          label="文档组织模式"
+          name="docMode"
+          type="select"
+          :options="[
+            { label: '父子文档模式（父文档本身可阅读）', value: 'hierarchy' },
+            { label: '目录模式（父文档仅作为目录）', value: 'catalog' },
+          ]"
+          help="目录模式下，阅读页父文档显示为目录，点击目录自动展开并打开其下第一个文档"
+        />
+        <FormKit
           v-model="form.description"
           label="描述"
           type="textarea"
@@ -1684,6 +1716,34 @@ onBeforeUnmount(() => {
         <template v-if="shareForm.enabled">
           <div class="share-divider"></div>
 
+          <!-- 分享 Token（自定义短链标识，全局唯一） -->
+          <div class="share-row">
+            <div class="share-row-left">
+              <div class="share-row-title">分享 Token</div>
+              <div class="share-row-help">
+                短链标识，全局唯一；留空保存时自动生成，仅支持字母、数字、- 和 _
+              </div>
+            </div>
+            <div class="share-row-right share-token-box">
+              <input
+                v-model="shareForm.token"
+                type="text"
+                class="share-input"
+                placeholder="留空自动生成"
+                autocomplete="off"
+                spellcheck="false"
+              />
+              <VButton
+                size="sm"
+                type="default"
+                class="share-token-random-btn"
+                @click="randomizeShareToken"
+              >
+                随机
+              </VButton>
+            </div>
+          </div>
+
           <!-- 访问密码 -->
           <div class="share-row">
             <div class="share-row-left">
@@ -1726,14 +1786,14 @@ onBeforeUnmount(() => {
             </div>
             <div class="share-row-right share-link-box">
               <input
-                :value="shareForm.url"
+                :value="shareUrl"
                 type="text"
                 class="share-input share-link-input"
                 readonly
                 placeholder="保存后将在此显示外链地址"
               />
               <VButton
-                v-if="shareForm.url"
+                v-if="shareUrl"
                 size="sm"
                 type="secondary"
                 class="share-copy-btn"
@@ -3310,6 +3370,18 @@ onBeforeUnmount(() => {
 
 .share-link-box {
   gap: 0.5rem;
+}
+
+.share-token-box {
+  gap: 0.375rem;
+}
+
+.share-token-box .share-input {
+  width: 9.5rem;
+}
+
+.share-token-random-btn {
+  flex-shrink: 0;
 }
 
 .share-link-input {
